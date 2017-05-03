@@ -6,10 +6,10 @@ angular.module('bhima.controllers')
 .controller('DebtorGroupUpdateController', DebtorGroupsUpdateController);
 
 DebtorGroupsUpdateController.$inject = [
-  '$state', 'DebtorGroupService', 'AccountService', 'PriceListService', 'ScrollService', 'util', 'NotifyService'
+  '$state', 'DebtorGroupService', 'AccountService', 'PriceListService', 'ScrollService', 'util', 'NotifyService', 'ModalService'
 ];
 
-function DebtorGroupsUpdateController($state, DebtorGroups, Accounts, Prices, ScrollTo, util, Notify) {
+function DebtorGroupsUpdateController($state, DebtorGroups, Accounts, Prices, ScrollTo, util, Notify, Modal) {
   var vm = this;
   var target = $state.params.uuid;
 
@@ -20,6 +20,9 @@ function DebtorGroupsUpdateController($state, DebtorGroups, Accounts, Prices, Sc
 
   vm.$loading = true;
   vm.$loaded = false;
+  vm.cancel = cancel;
+
+  vm.deleteGroup = deleteGroup;
 
   // reset name attribute to ensure no UI glitch
   $state.current.data.label = null;
@@ -75,6 +78,10 @@ function DebtorGroupsUpdateController($state, DebtorGroups, Accounts, Prices, Sc
       .catch(Notify.handleError);
   }
 
+  function cancel(){
+    $state.go('debtorGroups.list');
+  }
+
   function billingServiceSubscriptions() {
     var modal = DebtorGroups.manageBillingServices(vm.group);
     modal.result
@@ -94,4 +101,26 @@ function DebtorGroupsUpdateController($state, DebtorGroups, Accounts, Prices, Sc
         Notify.success('FORM.INFO.UPDATE_SUCCESS');
       });
   }
+
+  /**
+   * @function deleteGroup
+   * @description delete a creditor group
+   */
+  function deleteGroup(groupUuid) {
+    Modal.confirm()
+      .then(function (confirmResponse) {
+        if (!confirmResponse) {
+          return false;
+        }
+
+        // user has confirmed removal of debtor group
+        return DebtorGroups.remove(groupUuid)
+          .then(function () {
+            Notify.success('FORM.INFO.DELETE_SUCCESS');
+            $state.go('debtorGroups.list', null, {reload : true});
+          })
+          .catch(Notify.handleError);
+      })
+  }
+
 }

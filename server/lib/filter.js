@@ -1,16 +1,21 @@
 const _ = require('lodash');
 const moment = require('moment');
 
+const Periods = require('./period');
+
 const RESERVED_KEYWORDS = ['limit', 'detailed'];
 const DEFAULT_LIMIT_KEY = 'limit';
 const DEFAULT_UUID_PARTIAL_KEY = 'uuid';
 
 // @FIXME patch code - this could be implemented in another library
-const PERIODS = {
-  today : () => { return { start : moment().toDate(), end : moment().toDate() } },
-  week : () => { return { start : moement().startOf('week').toDate(), end : moment().endOf('week').toDate() } },
-  month : () => {  return { start : moment().startOf('month').toDate(), end : moment().endOf('month').toDate() } }
-};
+//
+// IF no client_timestamp is passed with the request, the server's timestamp is used
+// IF a client_timestamp is passed the client timestamp is used
+// const PERIODS = {
+  // today : () => { return { start : moment().toDate(), end : moment().toDate() } },
+  // week : () => { return { start : moment().startOf('week').toDate(), end : moment().endOf('week').toDate() } },
+  // month : () => {  return { start : moment().startOf('month').toDate(), end : moment().endOf('month').toDate() } }
+// };
 /**
  * @class FilterParser
  *
@@ -34,20 +39,20 @@ const PERIODS = {
  */
 class FilterParser {
   // options that are used by all routes that shouldn't be considered unique filters
-  constructor(filters, filterOptions) {
-    let options = filterOptions || {};
-
+  constructor(filters = {}, options = {}) {
     // stores for processing options
     this._statements = [];
     this._parameters = [];
 
-    this._filters = _.clone(filters) || {};
+    this._filters = _.clone(filters);
 
     // configure default options
     this._tableAlias = options.tableAlias || null;
     this._limitKey = options.limitKey || DEFAULT_LIMIT_KEY;
     this._order = '';
-    this._parseUuids = options.parseUuids || true;
+    this._parseUuids = _.isUndefined(options.parseUuids) ? true : options.parseUuids;
+    this._autoParseStatements = _.isUndefined(options.autoParseStatements) ? true : options.autoParseStatements;
+    this._group = '';
   }
 
 
@@ -65,11 +70,11 @@ class FilterParser {
    *                              the object table alias if it exists
    */
   fullText(filterKey, columnAlias = filterKey, tableAlias = this._tableAlias) {
-    let tableString = this._formatTableAlias(tableAlias);
+    const tableString = this._formatTableAlias(tableAlias);
 
     if (this._filters[filterKey]) {
-      let searchString = `%${this._filters[filterKey]}%`;
-      let preparedStatement = `LOWER(${tableString}${columnAlias}) LIKE ? `;
+      const searchString = `%${this._filters[filterKey]}%`;
+      const preparedStatement = `LOWER(${tableString}${columnAlias}) LIKE ? `;
 
       this._addFilter(preparedStatement, searchString);
       delete this._filters[filterKey];
@@ -77,16 +82,24 @@ class FilterParser {
   }
 
   period(filterKey, columnAlias = filterKey, tableAlias = this._tableAlias) {
-    let tableString = this._formatTableAlias(tableAlias);
+    const tableString = this._formatTableAlias(tableAlias);
 
     if (this._filters[filterKey]) {
-      const targetPeriod = PERIODS[this._filters[filterKey]]();
+      // if a client timestamp has been passed - this will be passed in here
+      const period = new Periods(this._filters.client_timestamp);
+      const targetPeriod = period.lookupPeriod(this._filters[filterKey]);
 
-      let periodFromStatement = `DATE(${tableString}${columnAlias}) >= DATE(?)`;
-      let periodToStatement = `DATE(${tableString}${columnAlias}) <= DATE(?)`;
+      // specific base case - if all time requested to not apply a date filter
+      if (targetPeriod === period.periods.allTime || targetPeriod === period.periods.custom) {
+        delete this._filters[filterKey];
+        return;
+      }
 
-      this._addFilter(periodFromStatement, targetPeriod.start);
-      this._addFilter(periodToStatement, targetPeriod.end);
+      const periodFromStatement = `DATE(${tableString}${columnAlias}) >= DATE(?)`;
+      const periodToStatement = `DATE(${tableString}${columnAlias}) <= DATE(?)`;
+
+      this._addFilter(periodFromStatement, targetPeriod.limit.start());
+      this._addFilter(periodToStatement, targetPeriod.limit.end());
       delete this._filters[filterKey];
     }
   }
@@ -102,10 +115,10 @@ class FilterParser {
    *                              the object table alias if it exists
    */
   dateFrom(filterKey, columnAlias = filterKey, tableAlias = this._tableAlias) {
-    let tableString = this._formatTableAlias(tableAlias);
+    const tableString = this._formatTableAlias(tableAlias);
 
     if (this._filters[filterKey]) {
-      let preparedStatement = `DATE(${tableString}${columnAlias}) >= DATE(?)`;
+      const preparedStatement = `DATE(${tableString}${columnAlias}) >= DATE(?)`;
       this._addFilter(preparedStatement, moment(this._filters[filterKey]).format('YYYY-MM-DD').toString());
 
       delete this._filters[filterKey];
@@ -122,10 +135,10 @@ class FilterParser {
    *                              the object table alias if it exists
    */
   dateTo(filterKey, columnAlias = filterKey, tableAlias = this._tableAlias) {
-    let tableString = this._formatTableAlias(tableAlias);
+    const tableString = this._formatTableAlias(tableAlias);
 
     if (this._filters[filterKey]) {
-      let preparedStatement = `DATE(${tableString}${columnAlias}) <= DATE(?)`;
+      const preparedStatement = `DATE(${tableString}${columnAlias}) <= DATE(?)`;
 
       this._addFilter(preparedStatement, moment(this._filters[filterKey]).format('YYYY-MM-DD').toString());
       delete this._filters[filterKey];
@@ -133,10 +146,10 @@ class FilterParser {
   }
 
   equals(filterKey, columnAlias = filterKey, tableAlias = this._tableAlias) {
-    let tableString = this._formatTableAlias(tableAlias);
+    const tableString = this._formatTableAlias(tableAlias);
 
     if (this._filters[filterKey]) {
-      let preparedStatement = `${tableString}${columnAlias} = ?`;
+      const preparedStatement = `${tableString}${columnAlias} = ?`;
 
       this._addFilter(preparedStatement, this._filters[filterKey]);
       delete this._filters[filterKey];
@@ -183,24 +196,42 @@ class FilterParser {
   }
 
   /**
-   * @TODO
+   * @method setOrder
+   *
    * @description
-   * Temporary solution to setting ordering on complex querries - this should be
+   * Allows setting the SQL ordering on complex queries - this should be
    * exposed through the same interface as all other filters.
    */
   setOrder(orderString) {
     this._order = orderString;
   }
 
+  /**
+   * @method setGroup
+   *
+   * @description
+   * Allows setting the SQL groups in the GROUP BY statement.  A developer is expected to
+   * provide a valid SQL string.  This will be appended to the SQL statement after the
+   * WHERE clause.
+   */
+  setGroup(groupString) {
+    this._group = groupString;
+  }
+
   applyQuery(sql) {
     // optionally call utility method to parse all remaining options as simple
     // equality filters into `_statements`
-    let limitCondition = this._parseLimit();
-    this._parseDefaultFilters();
-    let conditionStatements = this._parseStatements();
-    let order = this._order;
+    const limitCondition = this._parseLimit();
 
-    return `${sql} WHERE ${conditionStatements} ${order} ${limitCondition}`;
+    if (this._autoParseStatements) {
+      this._parseDefaultFilters();
+    }
+
+    const conditionStatements = this._parseStatements();
+    const order = this._order;
+    const group = this._group;
+
+    return `${sql} WHERE ${conditionStatements} ${group} ${order} ${limitCondition}`;
   }
 
   parameters() {
@@ -231,13 +262,12 @@ class FilterParser {
    * have filter types - these always check for equality
    */
   _parseDefaultFilters() {
-
     // remove options that represent reserved keys
     this._filters = _.omit(this._filters, RESERVED_KEYWORDS);
 
     _.each(this._filters, (value, key) => {
       let valueString = '?';
-      let tableString = this._formatTableAlias(this._tableAlias);
+      const tableString = this._formatTableAlias(this._tableAlias);
 
       if (this._parseUuids) {
         // check to see if key contains the text uuid - if it does and parseUuids has
@@ -253,12 +283,12 @@ class FilterParser {
   _parseStatements() {
     // this will always return true for a condition statement
     const DEFAULT_NO_STATEMENTS = '1';
-    return _.isEmpty(this._statements) ? DEFAULT_NO_STATEMENTS :this._statements.join(' AND ');
+    return _.isEmpty(this._statements) ? DEFAULT_NO_STATEMENTS : this._statements.join(' AND ');
   }
 
   _parseLimit() {
     let limitString = '';
-    let limit = Number(this._filters[this._limitKey]);
+    const limit = Number(this._filters[this._limitKey]);
 
     if (limit) {
       limitString = `LIMIT ${limit} `;

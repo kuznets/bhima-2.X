@@ -35,6 +35,7 @@ exports.find = find;
 exports.journalEntryList = journalEntryList;
 
 exports.editTransaction = editTransaction;
+exports.count = count;
 
 /**
  * Looks up a transaction by record_uuid.
@@ -86,8 +87,12 @@ function lookupTransaction(recordUuid) {
  * the options object.  If no query parameters are provided, the method will
  * return all items in the posting journal
  */
-function find(options) {
-  const filters = new FilterParser(options, { tableAlias: 'p' });
+function find(options, source) {
+  const filters = new FilterParser(options, { tableAlias : 'p', autoParseStatements : false });
+
+  // @FIXME selected the source between the posting journal and general ledger should be carefully designed
+  //        as it will be used in many places, allowing a calling method to arbitrarily define the table should be replaced
+  const origin = source || 'posting_journal';
 
   const sql = `
     SELECT BUID(p.uuid) AS uuid, p.project_id, p.fiscal_year_id, p.period_id,
@@ -99,7 +104,7 @@ function find(options) {
       p.comment, p.origin_id, p.user_id, p.cc_id, p.pc_id, pro.abbr,
       pro.name AS project_name, per.start_date AS period_start,
       per.end_date AS period_end, a.number AS account_number, u.display_name
-    FROM posting_journal p
+    FROM ${origin} p
       JOIN project pro ON pro.id = p.project_id
       JOIN period per ON per.id = p.period_id
       JOIN account a ON a.id = p.account_id
@@ -110,17 +115,25 @@ function find(options) {
       LEFT JOIN document_map dm2 ON dm2.uuid = p.reference_uuid
   `;
 
-  filters.dateFrom('dateFrom', 'trans_date');
-  filters.dateTo('dateTo', 'trans_date');
+  filters.period('period', 'trans_date');
+  filters.dateFrom('custom_period_start', 'trans_date');
+  filters.dateTo('custom_period_end', 'trans_date');
 
   filters.fullText('description');
   filters.fullText('comment');
+
+  filters.equals('user_id');
+  filters.equals('account_id');
+  filters.equals('project_id');
+  filters.equals('trans_id');
+  filters.equals('origin_id');
 
   filters.custom('amount', '(credit_equiv = ? OR debit_equiv = ?)', [options.amount, options.amount]);
 
   filters.setOrder('ORDER BY p.trans_date DESC');
 
   const query = filters.applyQuery(sql);
+
   const parameters = filters.parameters();
   return db.exec(query, parameters);
 }
@@ -129,8 +142,9 @@ function find(options) {
  * @function journalEntryList
  * Allows you to select which transactions to print
  */
-function journalEntryList(options) {
+function journalEntryList(options, source) {
   const uuids = options.uuids.map(uid => db.bid(uid));
+  const origin = source || 'posting_journal';
 
   const sql = `
     SELECT BUID(p.uuid) AS uuid, p.project_id, p.fiscal_year_id, p.period_id,
@@ -142,7 +156,7 @@ function journalEntryList(options) {
       p.comment, p.origin_id, p.user_id, p.cc_id, p.pc_id, pro.abbr,
       pro.name AS project_name, per.start_date AS period_start,
       per.end_date AS period_end, a.number AS account_number, u.display_name
-    FROM posting_journal p
+    FROM ${origin} p
       JOIN project pro ON pro.id = p.project_id
       JOIN period per ON per.id = p.period_id
       JOIN account a ON a.id = p.account_id
@@ -305,7 +319,7 @@ function editTransaction(req, res, next) {
   transformColumns(rowsAdded, true)
     .then((result) => {
       result.forEach((row) => {
-        db.convert(row, ['uuid', 'record_uuid']);
+        db.convert(row, ['uuid', 'record_uuid', 'entity_uuid']);
         // row = transformColumns(row);
         transaction.addQuery(INSERT_JOURNAL_ROW, [row]);
       });
@@ -313,7 +327,10 @@ function editTransaction(req, res, next) {
       return transformColumns(rowsChanged, false);
     })
     .then((result) => {
-      _.each(result, (row, uid) => transaction.addQuery(UPDATE_JOURNAL_ROW, [row, db.bid(uid)]));
+      _.each(result, (row, uid) => {
+        db.convert(row, ['entity_uuid']);
+        transaction.addQuery(UPDATE_JOURNAL_ROW, [row, db.bid(uid)]);
+      });
       return transaction.execute();
     })
     .then((result) => {
@@ -364,6 +381,10 @@ function transformColumns(rows, newRecord) {
       });
 
       delete row.account_number;
+    }
+
+    if (row.account_name) {
+      delete row.account_name;
     }
 
     if (row.hrEntity) {
@@ -469,4 +490,19 @@ function reverse(req, res, next) {
     .then(() => res.status(201).json({ uuid: voucherUuid }))
     .catch(next)
     .done();
+}
+
+/**
+ * GET /JOURNAL/COUNT
+ * Getting the number of transaction from the posting journal
+ *
+ */
+function count(req, res, next) {
+  const sql = `SELECT COUNT(DISTINCT posting_journal.trans_id) AS number_transactions FROM posting_journal;`;
+
+  db.exec(sql)
+    .then(function (rows) {
+      res.status(200).send(rows);
+    })
+    .catch(next);
 }

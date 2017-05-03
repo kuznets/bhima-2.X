@@ -2,7 +2,7 @@ angular.module('bhima.services')
   .service('PatientInvoiceService', PatientInvoiceService);
 
 PatientInvoiceService.$inject = [
-  '$uibModal', 'util', 'SessionService', 'PrototypeApiService', 'FilterService'
+  '$uibModal', 'util', 'SessionService', 'PrototypeApiService', 'DepricatedFilterService'
 ];
 
 /**
@@ -137,10 +137,15 @@ function PatientInvoiceService(Modal, util, Session, Api, Filters) {
 
     // returns columns from filters
     return columns.filter(function (column) {
+      var LIMIT_UUID_LENGTH = 6;
       var value = params[column.field];
 
       if (angular.isDefined(value)) {
         column.value = value;
+
+        if (column.field === 'cash_uuid') {
+          column.value = column.value.slice(0, LIMIT_UUID_LENGTH).concat('...');
+        }
 
         // @FIXME tempoarary hack for default period
         if (column.field === 'defaultPeriod') {

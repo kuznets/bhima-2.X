@@ -212,6 +212,7 @@ exports.configure = function configure(app) {
 
   // API for journal
   app.get('/journal', journal.list);
+  app.get('/journal/count', journal.count);
   app.get('/journal/:record_uuid', journal.getTransaction);
   app.post('/journal/:record_uuid/edit', journal.editTransaction);
   app.post('/journal/:uuid/reverse', journal.reverse);
@@ -389,10 +390,12 @@ exports.configure = function configure(app) {
   app.get('/reports/finance/income_expense', financeReports.incomeExpense.document);
   app.get('/reports/finance/balance', financeReports.balance.document);
   app.get('/reports/finance/account', financeReports.reportAccounts.document);
-  app.get('/reports/finance/journal', financeReports.journal.report);
+  app.get('/reports/finance/journal', financeReports.journal.postingReport);
+  app.get('/reports/finance/posted_journal', financeReports.journal.postedReport);
   app.get('/reports/finance/clientsReport', financeReports.clientsReport.document);
   app.get('/reports/finance/general_ledger/', financeReports.generalLedger.report);
   app.get('/reports/finance/general_ledger/:account_id', financeReports.generalLedger.accountSlip);
+  app.get('/reports/finance/creditors/aged', financeReports.creditors.aged);
 
   app.get('/reports/keys/:key', report.keys);
 

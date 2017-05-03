@@ -4,7 +4,7 @@ angular.module('bhima.controllers')
 InvoiceRegistryController.$inject = [
   'PatientInvoiceService', 'bhConstants', 'NotifyService',
   'SessionService', 'ReceiptModal', 'appcache', 'uiGridConstants',
-  'ModalService', 'CashService', 'GridSortingService', '$state', 'FilterService',
+  'ModalService', 'CashService', 'GridSortingService', '$state', 'DepricatedFilterService',
 ];
 
 /**
@@ -45,10 +45,11 @@ function InvoiceRegistryController(Invoices, bhConstants, Notify, Session, Recei
       aggregationType: uiGridConstants.aggregationTypes.count,
       aggregationHideLabel : true,
       footerCellClass : 'text-center',
-      sortingAlgorithm : Sorting.algorithms.sortByReference
+      cellTemplate : '/partials/patient_invoice/registry/templates/reference.html',
+      sortingAlgorithm : Sorting.algorithms.sortByReference,
     },
     { field : 'date', cellFilter:'date', displayName : 'TABLE.COLUMNS.BILLING_DATE', headerCellFilter : 'translate', type: 'date' },
-    { name : 'patientName', displayName : 'TABLE.COLUMNS.PATIENT', headerCellFilter : 'translate', cellTemplate : '/modules/patients/templates/linkPatient.cell.html' },
+    { name : 'patientName', displayName : 'TABLE.COLUMNS.PATIENT', headerCellFilter : 'translate' },
     { field : 'cost',
       displayName : 'TABLE.COLUMNS.COST',
       headerCellFilter : 'translate',
@@ -117,7 +118,6 @@ function InvoiceRegistryController(Invoices, bhConstants, Notify, Session, Recei
 
   // search and filter data in Invoice Registry
   function search() {
-
     Invoices.openSearchModal(vm.filters)
       .then(function (parameters) {
         // no parameters means the modal was dismissed.

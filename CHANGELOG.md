@@ -2,6 +2,73 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+<a name="0.4.1"></a>
+## [0.4.1](https://github.com/IMA-WorldHealth/bhima-2.X/compare/v0.4.0...v0.4.1) (2017-05-03)
+
+
+### Bug Fixes
+
+* **build:** use higher number port for kwilu ([f4654a0](https://github.com/IMA-WorldHealth/bhima-2.X/commit/f4654a0))
+* **ci:** ensure notifications get through https ([ab5cf64](https://github.com/IMA-WorldHealth/bhima-2.X/commit/ab5cf64))
+* **journal:** catch editing errors ([de7451a](https://github.com/IMA-WorldHealth/bhima-2.X/commit/de7451a)), closes [#1536](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1536) [#1560](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1560) [#1558](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1558)
+* **journal:** edit transaction doesn't load accounts ([2b2435d](https://github.com/IMA-WorldHealth/bhima-2.X/commit/2b2435d))
+* **journal:** ensure that data callbacks disable cellNav ([#1517](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1517)) ([55f86b8](https://github.com/IMA-WorldHealth/bhima-2.X/commit/55f86b8)), closes [#1495](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1495)
+* **journal:** Select all rows (include group rows) in the journal grid ([#1526](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1526)) ([9263a28](https://github.com/IMA-WorldHealth/bhima-2.X/commit/9263a28))
+
+
+### Features
+
+* **account:** add excludeTitleAccounts option to bhAccountSelect ([da56265](https://github.com/IMA-WorldHealth/bhima-2.X/commit/da56265)), closes [#1544](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1544)
+* **debtor groups:** put a cancel button ([#1527](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1527)) ([0a708fb](https://github.com/IMA-WorldHealth/bhima-2.X/commit/0a708fb))
+* **journal:** add editor for entities (D/C) ([#1511](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1511)) ([33b167c](https://github.com/IMA-WorldHealth/bhima-2.X/commit/33b167c))
+* **journal:** Add TXN count to footer ([ac06db3](https://github.com/IMA-WorldHealth/bhima-2.X/commit/ac06db3))
+* **journal:** default limit to today's records ([#1523](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1523)) ([57528e1](https://github.com/IMA-WorldHealth/bhima-2.X/commit/57528e1))
+* **journal:** Filter on Transaction Types ([f15c5cc](https://github.com/IMA-WorldHealth/bhima-2.X/commit/f15c5cc))
+* **journal:** show aggregate header for date + record ([#1542](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1542)) ([033d9cd](https://github.com/IMA-WorldHealth/bhima-2.X/commit/033d9cd))
+* **reports:** Report of Aged Creditor Debts ([#1475](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1475)) ([2f2cb6d](https://github.com/IMA-WorldHealth/bhima-2.X/commit/2f2cb6d))
+* **server:** verbose MySQL errors ([#1521](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1521)) ([d27d615](https://github.com/IMA-WorldHealth/bhima-2.X/commit/d27d615))
+
+
+
+<a name="0.4.0"></a>
+# 0.4.0 (2017-04-17)
+
+### Bug Fixes
+
+* **accounts:** do not nest grid in ngShow ([f15a5cf](https://github.com/IMA-WorldHealth/bhima-2.X/commit/f15a5cf))
+* **account:** uiSelect rendering bugs ([#1461](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1461)) ([c7cecb8](https://github.com/IMA-WorldHealth/bhima-2.X/commit/c7cecb8))
+* **build:** make sh scripts executable ([#1471](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1471)) ([e7bb16c](https://github.com/IMA-WorldHealth/bhima-2.X/commit/e7bb16c))
+* **build:** rm es6 from client ([#1476](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1476)) ([d6ecaf7](https://github.com/IMA-WorldHealth/bhima-2.X/commit/d6ecaf7))
+* **cash:** remove fault SQL exception handlers ([f940cf9](https://github.com/IMA-WorldHealth/bhima-2.X/commit/f940cf9)), closes [#1445](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1445)
+* **ci:** syntax in .travis.yml ([82770a4](https://github.com/IMA-WorldHealth/bhima-2.X/commit/82770a4))
+* **db:** do not require service UUID ([#1509](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1509)) ([2094723](https://github.com/IMA-WorldHealth/bhima-2.X/commit/2094723))
+* **grid:** enable inline date filtering ([4780410](https://github.com/IMA-WorldHealth/bhima-2.X/commit/4780410))
+* **i18n:** better Aged Debtor French translation ([#1469](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1469)) ([8866491](https://github.com/IMA-WorldHealth/bhima-2.X/commit/8866491))
+* **journal:** Prevent Imbalanced transactions via client validation ([#1465](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1465)) ([6cdd9d1](https://github.com/IMA-WorldHealth/bhima-2.X/commit/6cdd9d1))
+* **partials:** incorporate stock management ([7b7ef1f](https://github.com/IMA-WorldHealth/bhima-2.X/commit/7b7ef1f))
+* **trial_balance:** ensure client works with server ([1d3b7b2](https://github.com/IMA-WorldHealth/bhima-2.X/commit/1d3b7b2))
+* **vouchers:** catch no-filter corner case ([6aad64f](https://github.com/IMA-WorldHealth/bhima-2.X/commit/6aad64f)), closes [#1466](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1466)
+
+
+### Features
+
+* **ci:** add callbacks for robot to build travis ([#1508](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1508)) ([e692a41](https://github.com/IMA-WorldHealth/bhima-2.X/commit/e692a41))
+* **journal:** Add the column debit and credit source with the currency used in the transaction ([#1504](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1504)) ([e95a0f6](https://github.com/IMA-WorldHealth/bhima-2.X/commit/e95a0f6))
+* **journal:** Input Validation in Transaction Edit ([570b993](https://github.com/IMA-WorldHealth/bhima-2.X/commit/570b993))
+* **journal:** the bhAccountSelect is clear-able ([#1510](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1510)) ([0ff8e0a](https://github.com/IMA-WorldHealth/bhima-2.X/commit/0ff8e0a))
+* **registries:** link receipts from references ([55d790b](https://github.com/IMA-WorldHealth/bhima-2.X/commit/55d790b))
+* **stock:** implement stock management modules ([1c5364b](https://github.com/IMA-WorldHealth/bhima-2.X/commit/1c5364b))
+* **vouchers:** link receipt w/ id column ([a0eb2e1](https://github.com/IMA-WorldHealth/bhima-2.X/commit/a0eb2e1))
+
+### Performance Improvements
+
+* **enterprises:** only $digest() on update ([8a3886e](https://github.com/IMA-WorldHealth/bhima-2.X/commit/8a3886e))
+* **settings:** use translate directive ([c0ac714](https://github.com/IMA-WorldHealth/bhima-2.X/commit/c0ac714)), closes [#1074](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1074)
+* **uiGrid:** use performance feats where possible ([de20485](https://github.com/IMA-WorldHealth/bhima-2.X/commit/de20485)), closes [#1039](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1039)
+* **uiGrid:** use performance feats where possible ([c2657ab](https://github.com/IMA-WorldHealth/bhima-2.X/commit/c2657ab)), closes [#1039](https://github.com/IMA-WorldHealth/bhima-2.X/issues/1039)
+
+
+
 <a name="0.3.0"></a>
 # 0.3.0 (2017-04-04)
 
