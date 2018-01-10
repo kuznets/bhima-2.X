@@ -8,6 +8,7 @@
  */
 
 const _ = require('lodash');
+const shared = require('../shared');
 const ReportManager = require('../../../../lib/ReportManager');
 const Vouchers = require('../../vouchers');
 const pdf = require('../../../../lib/renderers/pdf');
@@ -15,6 +16,8 @@ const pdf = require('../../../../lib/renderers/pdf');
 // dependencies for barcode translation
 const barcode = require('../../../../lib/barcode');
 const identifiers = require('../../../../config/identifiers');
+
+const util = require('../../../../lib/util');
 
 const entityIdentifier = identifiers.VOUCHER.key;
 
@@ -39,7 +42,7 @@ function receipt(req, res, next) {
 
   const options = req.query;
 
-  let report;
+  let receiptReport;
   const data = {};
   const record = {};
 
@@ -51,14 +54,14 @@ function receipt(req, res, next) {
   }
 
   try {
-    report = new ReportManager(template, req.session, options);
+    receiptReport = new ReportManager(template, req.session, options);
   } catch (e) {
     return next(e);
   }
 
   return Vouchers.lookupVoucher(req.params.uuid)
     .then((voucher) => {
-      voucher.barcode = barcode.generate(entityIdentifier, voucher.uuid)
+      voucher.barcode = barcode.generate(entityIdentifier, voucher.uuid);
 
       // voucher details
       record.details = voucher;
@@ -69,7 +72,7 @@ function receipt(req, res, next) {
       // populate data for the view
       _.extend(data, record, metadata);
 
-      return report.render(data);
+      return receiptReport.render(data);
     })
     .then((result) => {
       res.set(result.headers).send(result.report);
@@ -86,26 +89,34 @@ function receipt(req, res, next) {
  */
 function report(req, res, next) {
   const options = _.clone(req.query);
-  _.extend(options, { csvKey: 'rows', filename: 'VOUCHERS.GLOBAL.REPORT', orientation: 'landscape' });
+  const filters = shared.formatFilters(options);
+  _.extend(options, {
+    csvKey : 'rows',
+    filename : 'VOUCHERS.GLOBAL.REPORT',
+    orientation : 'landscape',
+    footerRight : '[page] / [toPage]',
+    footerFontSize : '7',
+  });
 
-  let report;
+  let reportInstance;
 
   try {
-    report = new ReportManager(REPORT_TEMPLATE, req.session, options);
+    reportInstance = new ReportManager(REPORT_TEMPLATE, req.session, options);
     delete options.orientation;
   } catch (e) {
     return next(e);
   }
 
-  return Vouchers.find(options)
-    .then((vouchers) => {
-      const data = {
-        rows     : vouchers,
-        dateFrom : req.query.dateFrom,
-        dateTo   : req.query.dateTo,
-      };
+  const data = { filters };
 
-      return report.render(data);
+    return Vouchers.find(options)
+    .then(rows => {
+      _.extend(data, { rows });
+      return Vouchers.totalAmountByCurrency(options);
+    })
+    .then((sumAmount) => {
+      _.extend(data, { totals : sumAmount });
+      return reportInstance.render(data);
     })
     .then((result) => {
       res.set(result.headers).send(result.report);
@@ -113,3 +124,4 @@ function report(req, res, next) {
     .catch(next)
     .done();
 }
+

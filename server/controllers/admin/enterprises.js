@@ -4,10 +4,9 @@
  * This controller is responsible for creating and updating Enterprises.
  * Each enterprise must necessarily have a name, an abbreviation, a geographical
  * location as well as a currency and it is not possible to remove an enterprise.
- */
+ * */
 
-
-const db       = require('../../lib/db');
+const db = require('../../lib/db');
 const NotFound = require('../../lib/errors/NotFound');
 
 exports.lookupEnterprise = lookupEnterprise;
@@ -15,7 +14,6 @@ exports.lookupByProjectId = lookupByProjectId;
 
 // GET /enterprises
 exports.list = function list(req, res, next) {
-
   let sql = 'SELECT id, name, abbr FROM enterprise';
 
   if (req.query.detailed === '1') {
@@ -26,20 +24,19 @@ exports.list = function list(req, res, next) {
       FROM enterprise;`;
   }
 
-  //FIX ME : why not use db.one()?
   db.exec(sql)
-  .then(function (rows) {
-    res.status(200).json(rows);
-  })
-  .catch(next)
-  .done();
+    .then((rows) => {
+      res.status(200).json(rows);
+    })
+    .catch(next)
+    .done();
 };
 
 
 // GET /enterprises/:id
 exports.detail = function detail(req, res, next) {
   lookupEnterprise(req.params.id)
-    .then(function (enterprise) {
+    .then((enterprise) => {
       res.status(200).json(enterprise);
     })
     .catch(next)
@@ -68,7 +65,6 @@ function lookupEnterprise(id) {
  * @returns {Promise} - the result of the database query.
  */
 function lookupByProjectId(id) {
-
   const sql = `
     SELECT e.id, e.name, e.abbr, email, e.po_box, e.phone,
       BUID(e.location_id) AS location_id, e.logo, e.currency_id,
@@ -83,7 +79,7 @@ function lookupByProjectId(id) {
   `;
 
   return db.exec(sql, [id])
-    .then(function (rows) {
+    .then((rows) => {
       if (!rows.length) {
         throw new NotFound(`Could not find an enterprise with project id ${id}.`);
       }
@@ -97,8 +93,8 @@ exports.create = function create(req, res, next) {
   const enterprise = db.convert(req.body.enterprise, ['location_id']);
   const sql = 'INSERT INTO enterprise SET ?;';
 
-  db.exec(sql, [ enterprise ])
-    .then(function (row) {
+  db.exec(sql, [enterprise])
+    .then((row) => {
       res.status(201).json({ id : row.insertId });
     })
     .catch(next)
@@ -107,21 +103,21 @@ exports.create = function create(req, res, next) {
 
 // PUT /enterprises/:id
 exports.update = function update(req, res, next) {
-  let sql = 'UPDATE enterprise SET ? WHERE id = ?;';
-  let data = db.convert(req.body, ['location_id']);
+  const sql = 'UPDATE enterprise SET ? WHERE id = ?;';
+  const data = db.convert(req.body, ['location_id']);
   delete data.id;
 
   db.exec(sql, [data, req.params.id])
-  .then(function (row) {
-    if (!row.affectedRows) {
-      throw new NotFound(`Could not find an enterprise with id ${req.params.id}`);
-    }
+    .then((row) => {
+      if (!row.affectedRows) {
+        throw new NotFound(`Could not find an enterprise with id ${req.params.id}`);
+      }
 
-    return lookupEnterprise(req.params.id);
-  })
-  .then(function (enterprise) {
-    res.status(200).json(enterprise);
-  })
-  .catch(next)
-  .done();
+      return lookupEnterprise(req.params.id);
+    })
+    .then((enterprise) => {
+      res.status(200).json(enterprise);
+    })
+    .catch(next)
+    .done();
 };

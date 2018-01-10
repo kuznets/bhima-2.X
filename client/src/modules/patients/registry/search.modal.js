@@ -2,8 +2,8 @@ angular.module('bhima.controllers')
 .controller('PatientRegistryModalController', PatientRegistryModalController);
 
 PatientRegistryModalController.$inject = [
-  '$uibModalInstance', 'DateService', 'params', 'DebtorGroupService', 'PatientGroupService',
-  'UserService', 'bhConstants'
+  '$uibModalInstance', 'filters',
+  'bhConstants', 'moment', 'Store', 'util', 'PeriodService', 'PatientService',
 ];
 
 /**
@@ -12,117 +12,95 @@ PatientRegistryModalController.$inject = [
  * @description
  * This controller is responsible for setting up the filters for the patient
  * search functionality on the patient registry page.  Filters that are already
- * applied to the grid can be passed in via the params inject.
+ * applied to the grid can be passed in via the filters inject.
  */
-function PatientRegistryModalController(ModalInstance, Dates, params, DebtorGroups, PatientGroupsService, Users, bhConstants) {
+function PatientRegistryModalController(ModalInstance, filters, bhConstants, moment, Store, util, Periods, Patients) {
   var vm = this;
+  var changes = new Store({ identifier : 'key' });
+  vm.filters = filters;
 
-  // bind period labels from the service
-  vm.periods = Dates.period();
   vm.today = new Date();
+  vm.defaultQueries = {};
+  vm.searchQueries = {};
 
-  // bind filters if they have already been applied.  Otherwise, default to an
-  // empty object.
-  vm.params = params || {};
+  // displayValues will be an id:displayValue pair
+  var displayValues = {};
+  var lastDisplayValues = Patients.filters.getDisplayValueMap();
+
+  // assign default limit filter
+  if (filters.limit) {
+    vm.defaultQueries.limit = filters.limit;
+  }
+
+  // @TODO ideally these should be passed in when the modal is initialised these are known when the filter service is defined
+  var searchQueryOptions = [
+    'display_name', 'sex', 'hospital_no', 'reference', 'dateBirthFrom', 'dateBirthTo', 'dateRegistrationFrom', 'dateRegistrationTo',
+    'debtor_group_uuid', 'patient_group_uuid', 'user_id', 'defaultPeriod'
+  ];
+
+  // assign already defined custom filters to searchQueries object
+  vm.searchQueries = util.maskObjectFromKeys(filters, searchQueryOptions);
+
+
 
   // bind methods
   vm.submit = submit;
   vm.cancel = cancel;
   vm.clear = clear;
-  vm.setDateRange = setDateRange;
-  vm.dateFormat =  bhConstants.dayOptions.format;
 
-  DebtorGroups.read()
-    .then(function (result) {
-      vm.debtorGroups = result;
+  vm.onSelectDebtor = function onSelectDebtor(debtorGroup) {
+    vm.searchQueries.debtor_group_uuid = debtorGroup.uuid;
+    displayValues.debtor_group_uuid = debtorGroup.name;
+  };
+
+  vm.onSelectPatientGroup = function onSelectPatientGroup(patientGroup) {
+    vm.searchQueries.patient_group_uuid = patientGroup.uuid;
+    displayValues.patient_group_uuid = patientGroup.name;
+  };
+
+  // custom filter user_id - assign the value to the searchQueries object
+  vm.onSelectUser = function onSelectUser(user) {
+    vm.searchQueries.user_id = user.id;
+    displayValues.user_id = user.display_name;
+  };
+
+  // default filter limit - directly write to changes list
+  vm.onSelectLimit = function onSelectLimit(value) {
+    // input is type value, this will only be defined for a valid number
+    if (angular.isDefined(value)) {
+      changes.post({ key : 'limit', value : value });
+    }
+  };
+
+  // default filter period - directly write to changes list
+  vm.onSelectPeriod = function onSelectPeriod(period) {
+    var periodFilters = Periods.processFilterChanges(period);
+
+    periodFilters.forEach(function (filterChange) {
+      changes.post(filterChange);
     });
+  };
 
-  PatientGroupsService.read()
-    .then(function (result) {
-      vm.patientGroups = result;
-    });
-
-  Users.read()
-      .then(function (users) {
-        vm.users = users;
-      });
 
   // returns the parameters to the parent controller
   function submit(form) {
-    if (form.$invalid) { return; }
-
-    var parameters = angular.copy(vm.params);
-
-    // convert dates to strings
-    if (parameters.dateRegistrationFrom) {
-      parameters.dateRegistrationFrom = Dates.util.str(parameters.dateRegistrationFrom);
-    }
-
-    if (parameters.dateRegistrationTo) {
-      parameters.dateRegistrationTo = Dates.util.str(parameters.dateRegistrationTo);
-    }
-
-    if (parameters.dateBirthFrom) {
-      parameters.dateBirthFrom = Dates.util.str(parameters.dateBirthFrom);
-    }
-
-    if (parameters.dateBirthTo) {
-      parameters.dateBirthTo = Dates.util.str(parameters.dateBirthTo);
-    }
-
-    // make sure we don't have any undefined or empty parameters
-    angular.forEach(parameters, function (value, key) {
-      if (value === null || value === '') {
-        delete parameters[key];
+    // push all searchQuery values into the changes array to be applied
+    angular.forEach(vm.searchQueries, function (value, key) {
+      if (angular.isDefined(value)) {
+        // default to the original value if no display value is defined
+        var displayValue = displayValues[key] || lastDisplayValues[key] || value;
+        changes.post({ key: key, value: value, displayValue: displayValue });
       }
     });
 
-    return ModalInstance.close(parameters);
+    var loggedChanges = changes.getAll();
+
+    // return values to the Patient Registry Controller
+    return ModalInstance.close(loggedChanges);
   }
 
-  // clears search parameters.  Custom logic if a date is used so that we can
-  // clear two properties.
   function clear(value) {
-    if (value === 'registration') {
-      delete vm.params.dateRegistrationFrom;
-      delete vm.params.dateRegistrationTo;
-    } else if (value === 'dob') {
-      delete vm.params.dateBirthFrom;
-      delete vm.params.dateBirthTo;
-    } else {
-      delete vm.params[value];
-    }
-  }
-
-  // sets the date range for date inputs
-  function setDateRange(type, range) {
-
-    // the parameter key we will be setting
-    var key = (type === 'registration') ?
-      'dateRegistrationFrom' : 'dateBirthFrom';
-
-    // set the end date to today
-    if (type === 'registration') {
-      vm.params.dateRegistrationTo = new Date();
-    } else {
-      vm.params.dateBirthTo = new Date();
-    }
-
-    vm.range = range;
-
-    switch (range) {
-      case 'today':
-        vm.params[key] = new Date();
-        break;
-      case 'week':
-        vm.params[key] = Dates.current.week();
-        break;
-      case 'month':
-        vm.params[key] = Dates.current.month();
-        break;
-      default:
-        vm.params[key] = Dates.current.year();
-    }
+    delete vm.searchQueries[value];
   }
 
   // dismiss the modal

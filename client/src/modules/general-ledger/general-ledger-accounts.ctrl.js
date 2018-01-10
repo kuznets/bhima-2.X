@@ -3,7 +3,8 @@ angular.module('bhima.controllers')
 
 GeneralLedgerAccountsController.$inject = [
   'GeneralLedgerService', 'SessionService', 'NotifyService',
-  'uiGridConstants', 'ReceiptModal', 'ExportService',
+  'uiGridConstants', 'ReceiptModal', 'ExportService', 'GridColumnService', 'AppCache', 'GridStateService',
+  '$state', 'LanguageService', 'ModalService', 'FiscalService',
 ];
 
 /**
@@ -13,20 +14,24 @@ GeneralLedgerAccountsController.$inject = [
  * This controller is responsible for displaying accounts and their balances
  */
 function GeneralLedgerAccountsController(GeneralLedger, Session, Notify,
-  uiGridConstants, Receipts, Export) {
+  uiGridConstants, Receipts, Export, Columns, AppCache, GridState, $state, Languages, Modal, Fiscal) {
   var vm = this;
   var columns;
+  var state;
+  var cacheKey = 'GeneralLedgerAccounts';
+  var cache = AppCache(cacheKey);
 
   vm.enterprise = Session.enterprise;
+  vm.today = new Date();
   vm.filterEnabled = false;
+  vm.openColumnConfiguration = openColumnConfiguration;
 
   columns = [
     { field            : 'number',
       displayName      : 'TABLE.COLUMNS.ACCOUNT',
       enableFiltering  : true,
       cellTemplate     : '/modules/general-ledger/templates/account_number.cell.html',
-      headerCellFilter : 'translate',
-      width            : '10%' },
+      headerCellFilter : 'translate' },
 
     { field            : 'label',
       displayName      : 'TABLE.COLUMNS.LABEL',
@@ -34,21 +39,104 @@ function GeneralLedgerAccountsController(GeneralLedger, Session, Notify,
       enableFiltering  : true,
       headerCellFilter : 'translate' },
 
-    { field            : 'debtor_sold',
-      displayName      : 'TABLE.COLUMNS.DEBTOR_SOLD',
+    { field            : 'balance',
+      displayName      : 'TABLE.COLUMNS.BALANCE',
       enableFiltering  : false,
       headerCellFilter : 'translate',
       headerCellClass  : 'text-center',
-      cellTemplate     : '/modules/general-ledger/templates/debtor.cell.html',
-      width            : '15%' },
+      cellTemplate     : '/modules/general-ledger/templates/balance.cell.html' },
 
-    { field            : 'creditor_sold',
-      displayName      : 'TABLE.COLUMNS.CREDITOR_SOLD',
+    { field            : 'balance0',
+      displayName      : 'FORM.LABELS.OPENING_BALANCE',
       enableFiltering  : false,
       headerCellFilter : 'translate',
       headerCellClass  : 'text-center',
-      cellTemplate     : '/modules/general-ledger/templates/creditor.cell.html',
-      width            : '15%' },
+      cellTemplate     : getCellTemplate('balance0')},
+
+    { field            : 'balance1',
+      displayName      : 'TABLE.COLUMNS.DATE_MONTH.JANUARY',
+      enableFiltering  : false,
+      headerCellFilter : 'translate',
+      headerCellClass  : 'text-center',
+       cellTemplate    : getCellTemplate('balance1')},
+
+    { field            : 'balance2',
+      displayName      : 'TABLE.COLUMNS.DATE_MONTH.FEBRUARY',
+      enableFiltering  : false,
+      headerCellFilter : 'translate',
+      headerCellClass  : 'text-center',
+      cellTemplate     : getCellTemplate('balance2') },
+
+    { field            : 'balance3',
+      displayName      : 'TABLE.COLUMNS.DATE_MONTH.MARCH',
+      enableFiltering  : false,
+      headerCellFilter : 'translate',
+      headerCellClass  : 'text-center',
+      cellTemplate     : getCellTemplate('balance3') },
+
+    { field            : 'balance4',
+      displayName      : 'TABLE.COLUMNS.DATE_MONTH.APRIL',
+      enableFiltering  : false,
+      headerCellFilter : 'translate',
+      headerCellClass  : 'text-center',
+      cellTemplate     : getCellTemplate('balance4') },
+
+    { field            : 'balance5',
+      displayName      : 'TABLE.COLUMNS.DATE_MONTH.MAY',
+      enableFiltering  : false,
+      headerCellFilter : 'translate',
+      headerCellClass  : 'text-center',
+      cellTemplate     : getCellTemplate('balance5') },
+
+    { field            : 'balance6',
+      displayName      : 'TABLE.COLUMNS.DATE_MONTH.JUNE',
+      enableFiltering  : false,
+      headerCellFilter : 'translate',
+      headerCellClass  : 'text-center',
+      cellTemplate     : getCellTemplate('balance6') },
+
+    { field            : 'balance7',
+      displayName      : 'TABLE.COLUMNS.DATE_MONTH.JULY',
+      enableFiltering  : false,
+      headerCellFilter : 'translate',
+      headerCellClass  : 'text-center',
+      cellTemplate     : getCellTemplate('balance7') },
+
+    { field            : 'balance8',
+      displayName      : 'TABLE.COLUMNS.DATE_MONTH.AUGUST',
+      enableFiltering  : false,
+      headerCellFilter : 'translate',
+      headerCellClass  : 'text-center',
+      cellTemplate     : getCellTemplate('balance8') },
+
+    { field            : 'balance9',
+      displayName      : 'TABLE.COLUMNS.DATE_MONTH.SEPTEMBER',
+      enableFiltering  : false,
+      headerCellFilter : 'translate',
+      headerCellClass  : 'text-center',
+      cellTemplate     : getCellTemplate('balance9') },
+
+    { field            : 'balance10',
+      displayName      : 'TABLE.COLUMNS.DATE_MONTH.OCTOBER',
+      enableFiltering  : false,
+      headerCellFilter : 'translate',
+      headerCellClass  : 'text-center',
+      cellTemplate     : getCellTemplate('balance10') },
+
+    { field            : 'balance11',
+      displayName      : 'TABLE.COLUMNS.DATE_MONTH.NOVEMBER',
+      enableFiltering  : false,
+      headerCellFilter : 'translate',
+      headerCellClass  : 'text-center',
+      cellTemplate     : getCellTemplate('balance11') },
+
+
+    { field            : 'balance12',
+      displayName      : 'TABLE.COLUMNS.DATE_MONTH.DECEMBER',
+      enableFiltering  : false,
+      headerCellFilter : 'translate',
+      headerCellClass  : 'text-center',
+      cellTemplate     : getCellTemplate('balance12') },
 
     {
       field            : 'action',
@@ -57,14 +145,10 @@ function GeneralLedgerAccountsController(GeneralLedger, Session, Notify,
       enableFiltering  : false,
       enableSorting    : false,
       enableColumnMenu : false,
-      width            : '10%',
     },
   ];
 
   vm.gridApi = {};
-  vm.loading = true;
-  vm.slip = slip;
-  vm.slipCsv = slipCsv;
   vm.toggleFilter = toggleFilter;
 
   vm.gridOptions = {
@@ -73,11 +157,16 @@ function GeneralLedgerAccountsController(GeneralLedger, Session, Notify,
     flatEntityAccess  : true,
     enableColumnMenus : false,
     appScopeProvider  : vm,
-    onRegisterApi     : onRegisterApiFn,
+    onRegisterApi     : onRegisterApi,
   };
 
-  function onRegisterApiFn(gridApi) {
-    vm.gridApi = gridApi;
+  var columnConfig = new Columns(vm.gridOptions, cacheKey);
+  state = new GridState(vm.gridOptions, cacheKey);
+
+  vm.saveGridState = state.saveGridState;
+  vm.clearGridState = function clearGridState() {
+    state.clearGridState();
+    $state.reload();
   }
 
   function handleError(err) {
@@ -87,6 +176,15 @@ function GeneralLedgerAccountsController(GeneralLedger, Session, Notify,
 
   function toggleLoadingIndicator() {
     vm.loading = !vm.loading;
+  }
+
+  // API register function
+  function onRegisterApi(gridApi) {
+    vm.gridApi = gridApi;
+  }
+
+  function openColumnConfiguration() {
+    columnConfig.openConfigurationModal();
   }
 
   function toggleFilter() {
@@ -99,19 +197,70 @@ function GeneralLedgerAccountsController(GeneralLedger, Session, Notify,
     vm.gridOptions.data = data;
   }
 
-  function slip(id) {
-    Receipts.accountSlip(id);
+  function getCellTemplate(key) {
+    return '<div class="ui-grid-cell-contents text-right">' +
+      '<div ng-show="row.entity.' + key +'" >' +
+        '{{ row.entity.' + key +' | currency: grid.appScope.enterprise.currency_id }}' +
+      '</div>' +
+    '</div>';
   }
 
-  function slipCsv(id) {
-    var params = { renderer: 'csv' };
-    var url = '/reports/finance/general_ledger/'.concat(id);
-    Export.download(url, params, 'GENERAL_LEDGER.ACCOUNT_SLIP', 'export-'.concat(id));
+  // format Export Parameters
+  function formatExportParameters(type) {
+    return { renderer: type || 'pdf', lang: Languages.key };
   }
 
+  vm.download = GeneralLedger.download;
+  vm.slip = GeneralLedger.slip;
 
-  GeneralLedger.accounts.read()
-    .then(loadData)
-    .catch(handleError)
-    .finally(toggleLoadingIndicator);
+  // open search modal
+  vm.openFiscalYearConfiguration = function openFiscalYearConfiguration() {
+    Modal.openSelectFiscalYear()
+      .then(function (filters) {
+        if (!filters) { return; }
+        vm.fiscalYearLabel = filters.fiscal_year.label;
+        vm.filters.fiscal_year_label = filters.fiscal_year.label;
+
+        vm.filters = {
+          fiscal_year_id : filters.fiscal_year.id,
+          fiscal_year_label : filters.fiscal_year.label
+        };
+
+        vm.filtersSlip = {
+          dateFrom : filters.fiscal_year.start_date,
+          dateTo : filters.fiscal_year.end_date
+        };
+
+        load(vm.filters);
+      })
+      .catch(Notify.handleError);
+  };
+
+  // loads data for the general Ledger
+  function load(options) {
+    vm.loading = true;
+
+    GeneralLedger.accounts.read(null, options)
+      .then(loadData)
+      .catch(handleError)
+      .finally(toggleLoadingIndicator);
+  }
+
+  // runs on startup
+  function startup() {
+    Fiscal.fiscalYearDate({ date : vm.today })
+    .then(function (year) {
+      vm.year = year[0];
+      vm.fiscalYearLabel = vm.year.label;
+      vm.year.fiscal_year_id;
+      vm.filters = {fiscal_year_id : vm.year.fiscal_year_id, fiscal_year_label : vm.year.label};
+      vm.filtersSlip = {dateFrom : vm.year.start_date, dateTo : vm.year.end_date};
+
+      load(vm.filters);
+    })
+    .catch(Notify.handleError);
+  }
+
+  startup();
+
 }

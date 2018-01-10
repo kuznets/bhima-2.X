@@ -11,15 +11,13 @@
  * @requires lib/errors/BadRequest
  */
 
-
 const _ = require('lodash');
+const moment = require('moment');
 const db = require('../../../../lib/db');
 const ReportManager = require('../../../../lib/ReportManager');
 
 // report template
 const TEMPLATE = './server/controllers/finance/reports/balance/report.handlebars';
-
-const TITLE_ACCOUNT_TYPE = 4;
 
 // expose to the API
 exports.document = document;
@@ -35,34 +33,30 @@ function document(req, res, next) {
 
   // date option
   if (params.dateFrom && params.dateTo) {
-    session.dateFrom = new Date(params.dateFrom);
-    session.dateTo = new Date(params.dateTo);
+    session.dateFrom = moment(params.dateFrom).format('YYYY-MM-DD');
+    session.dateTo = moment(params.dateTo).format('YYYY-MM-DD');
   } else {
-    session.date = new Date(params.date);
+    session.date = moment(params.date).format('YYYY-MM-DD');
   }
 
   session.classe = params.classe;
   session.classe_name = params.classe_name;
   session.enterprise = req.session.enterprise;
 
-  _.defaults(params, { orientation: 'landscape', user: req.session.user });
+  _.defaults(params, { orientation : 'landscape', user : req.session.user });
 
   try {
     report = new ReportManager(TEMPLATE, req.session, params);
   } catch (e) {
-    return next(e);
+    next(e);
+    return;
   }
-
-  let accounts;
-  let totals;
 
   params.enterpriseId = session.enterprise.id;
 
   balanceReporting(params)
-    .then(balances => processAccounts(balances, accounts, totals))
-    .then((result) => {
-      return report.render({ accounts: result.accounts, totals: result.totals, session });
-    })
+    .then(balances => processAccounts(balances))
+    .then((result) => report.render({ accounts : result.accounts, totals : result.totals, session }))
     .then((result) => {
       res.set(result.headers).send(result.report);
     })
@@ -75,14 +69,13 @@ function document(req, res, next) {
  * @description process and format accounts balance
  * @param {object} balances The result of balanceReporting function
  */
-function processAccounts(balances, accounts, totals) {
-
+function processAccounts(balances) {
   // format and process opening balance for accounts
-  accounts = balances.beginning.reduce(function (init, row) {
-    let account = init;
-    let id = row.number;
-    let obj = account[id] = {};
-    let sold = getSold(row);
+
+  const accounts = balances.beginning.reduce((account, row) => {
+    const id = row.number;
+    const obj = {};
+    const sold = getSold(row);
     obj.label = row.label;
     obj.number = row.number;
     obj.beginDebit = sold.debit;
@@ -91,51 +84,55 @@ function processAccounts(balances, accounts, totals) {
     obj.middleCredit = 0;
     obj.is_charge = row.is_charge;
     obj.is_asset = row.is_asset;
+    account[id] = obj;
     return account;
   }, {});
 
   // format and process the monthly balance for accounts
-  balances.middle.forEach(function (row) {
-    let account = accounts[row.number] || {};
+  balances.middle.forEach((row) => {
+    const account = accounts[row.number] || {};
     account.middleDebit = row.debit;
     account.middleCredit = row.credit;
     account.label = row.label;
+    account.number = row.number;
     account.is_charge = row.is_charge;
     account.is_asset = row.is_asset;
     accounts[row.number] = account;
   });
 
-  Object.keys(accounts).forEach(function (item) {
+  Object.keys(accounts).forEach((item) => {
     accounts[item].endDebit = 0;
     accounts[item].endCredit = 0;
-    let sold = (accounts[item].beginDebit || 0 - accounts[item].beginCredit || 0) + (accounts[item].middleDebit - accounts[item].middleCredit);
+    const sold = (accounts[item].beginDebit || 0 - accounts[item].beginCredit || 0)
+      + (accounts[item].middleDebit - accounts[item].middleCredit);
     if (sold < 0) {
       accounts[item].endCredit = sold * -1;
     } else {
-     accounts[item].endDebit = sold;
+      accounts[item].endDebit = sold;
     }
   });
 
   // process for getting totals
-  totals = Object.keys(accounts).reduce(function (totals, key) {
-    let account = accounts[key];
-    totals.beginDebit += (account.beginDebit || 0);
-    totals.beginCredit += (account.beginCredit || 0);
-    totals.middleDebit += (account.middleDebit || 0);
-    totals.middleCredit += (account.middleCredit || 0);
-    totals.endDebit += (account.endDebit || 0);
-    totals.endCredit += (account.endCredit || 0);
-    return totals;
-  }, {
-    beginDebit   : 0,
-    beginCredit  : 0,
-    middleDebit  : 0,
-    middleCredit : 0,
-    endDebit     : 0,
-    endCredit    : 0,
-  });
+  const vtotals = Object.keys(accounts)
+    .reduce((t, key) => {
+      const account = accounts[key];
+      t.beginDebit += (account.beginDebit || 0);
+      t.beginCredit += (account.beginCredit || 0);
+      t.middleDebit += (account.middleDebit || 0);
+      t.middleCredit += (account.middleCredit || 0);
+      t.endDebit += (account.endDebit || 0);
+      t.endCredit += (account.endCredit || 0);
+      return t;
+    }, {
+      beginDebit   : 0,
+      beginCredit  : 0,
+      middleDebit  : 0,
+      middleCredit : 0,
+      endDebit     : 0,
+      endCredit    : 0,
+    });
 
-  return { accounts, totals };
+  return { accounts, totals : vtotals };
 }
 
 /**
@@ -146,7 +143,7 @@ function processAccounts(balances, accounts, totals) {
 function getSold(item) {
   let debit = 0;
   let credit = 0;
-  let sold  = 0;
+  let sold = 0;
 
   if (item.is_asset === 1 || item.is_charge === 1) {
     sold = item.debit - item.credit;
@@ -172,79 +169,51 @@ function getSold(item) {
  * @param {object} params An object which contains dates range and the account class
  */
 function balanceReporting(params) {
-  let sql, hasClasse, dateRange, queryParameters,
-      query = params,
-      data = {};
+  const query = params;
+  const data = {};
 
-  hasClasse = (query.classe !== '*');
-  dateRange = (query.dateFrom && query.dateTo);
+  const sqlFiscalYear = `
+    SELECT id, number_of_months FROM fiscal_year WHERE DATE(?) BETWEEN DATE(start_date) AND DATE(end_date) LIMIT 1;
+  `;
 
-  // gets the amount up to the current period
-  sql =
-    'SELECT a.number, a.id, a.label, a.type_id, a.is_charge, a.is_asset, SUM(pt.credit) AS credit, SUM(pt.debit) AS debit ' +
-    'FROM period_total AS pt JOIN account AS a ON pt.account_id = a.id ' +
-    'JOIN period AS p ON pt.period_id = p.id ' +
-    'WHERE p.end_date <= DATE(?) AND pt.enterprise_id = ? ' +
-     (hasClasse ? 'AND a.classe = ? ' : '') +
-    'GROUP BY a.id ';
+  let sql;
+  let fiscal;
 
-  if (dateRange) {
-    sql =
-    'SELECT a.number, a.id, a.label, a.type_id, a.is_charge, a.is_asset, SUM(pt.credit) AS credit, SUM(pt.debit) AS debit ' +
-    'FROM period_total AS pt JOIN account AS a ON pt.account_id = a.id ' +
-    'JOIN period AS p ON pt.period_id = p.id ' +
-    'WHERE p.start_date >= DATE(?) AND start_date < DATE(?) AND pt.enterprise_id = ? ' +
-     (hasClasse ? 'AND a.classe = ? ' : '') +
-    'GROUP BY a.id ';
-  }
+  return db.one(sqlFiscalYear, [query.date])
+    .then((fiscalYear) => {
+      fiscal = fiscalYear;
 
-  queryParameters = (dateRange) ? [query.dateFrom, query.dateTo, query.enterpriseId, query.classe] : [query.date, query.enterpriseId, query.classe];
+      sql = `
+        SELECT a.number, a.id, a.label, a.type_id, a.is_charge, a.is_asset, 
+          SUM(pt.credit) AS credit, SUM(pt.debit) AS debit, SUM(pt.debit - pt.credit) AS balance
+        FROM period_total AS pt JOIN account AS a ON pt.account_id = a.id
+        JOIN period AS p ON pt.period_id = p.id
+        WHERE (p.end_date < DATE(?) OR p.number = 0) AND pt.enterprise_id = ? AND p.fiscal_year_id = ?
+        GROUP BY a.id HAVING balance <> 0;`;
 
-  return db.exec(sql, queryParameters)
-  .then((rows) => {
-    data.beginning = rows;
+      const queryParameters = [query.date, query.enterpriseId, fiscal.id];
+      return db.exec(sql, queryParameters);
+    })
+    .then((rows) => {
+      data.beginning = rows;
 
-    sql =
-      'SELECT a.number, a.label, a.id, a.type_id, a.is_charge, a.is_asset, SUM(pt.credit) AS credit, SUM(pt.debit) AS debit ' +
-      'FROM period_total AS pt JOIN account AS a ON pt.account_id = a.id ' +
-      'JOIN period AS p ON pt.period_id = p.id ' +
-      'WHERE DATE(?) BETWEEN p.start_date AND p.end_date AND pt.enterprise_id = ? ' +
-       (hasClasse ? 'AND a.classe = ? ' : '') +
-      'GROUP BY a.id;';
+      sql = `
+        SELECT a.number, a.label, a.id, a.type_id, a.is_charge, a.is_asset,
+          SUM(pt.credit) AS credit, SUM(pt.debit) AS debit, SUM(pt.debit - pt.credit) AS balance
+        FROM period_total AS pt JOIN account AS a ON pt.account_id = a.id
+        JOIN period AS p ON pt.period_id = p.id
+        WHERE (DATE(?) BETWEEN p.start_date AND p.end_date AND pt.enterprise_id = ?)
+          OR (MONTH(?) = ? AND pt.enterprise_id = ? AND p.number = ? AND p.fiscal_year_id = ?)
+        GROUP BY a.id HAVING balance <> 0;`;
 
-    query.date = (dateRange) ? query.dateTo : query.date;
-
-    return db.exec(sql, [query.date, query.enterpriseId, query.classe]);
-  })
-  .then((rows) => {
-    data.middle = rows;
-    return data;
-  })
-  .then((rows) => {
-    // Manual mixing
-
-    // fill with zero if all accounts
-    sql =
-      `SELECT a.number, a.id, a.label, a.type_id, a.is_charge, a.is_asset, '0' AS credit, '0' AS debit
-       FROM account a WHERE a.type_id <> ${TITLE_ACCOUNT_TYPE} AND a.locked = 0;`;
-
-    return query.accountOption === 'all' ? db.exec(sql) : false;
-  })
-  .then((rows) => {
-    if (!rows) { return data; }
-
-    // Naive manipulation for filling with zero
-    let accounts = rows;
-    let touched  = data.beginning.map(item => {
-      return item.id;
+      const period13 = fiscal.number_of_months + 1;
+      return db.exec(sql, [
+        query.date, query.enterpriseId,
+        query.date, fiscal.number_of_months, query.enterpriseId, period13, fiscal.id,
+      ]);
+    })
+    .then((rows) => {
+      data.middle = rows;
+      return data;
     });
-
-    accounts.forEach(item => {
-      if (touched.indexOf(item.id) === -1) {
-        data.beginning.push(item);
-      }
-    });
-
-    return data;
-  });
 }

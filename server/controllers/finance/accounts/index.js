@@ -15,18 +15,25 @@
  * @todo - move away from calling lookup() before action.  This is an
  * unnecessary database request.
  *
- * @requires db
- * @requires NotFound
+ * @requires q
+ * @requires lib/db
+ * @requires lib/errors/NotFound
+ * @requires lib/errors/BadRequest
  * @requires accounts/types
+ * @requires accounts/categories
+ * @requires lib/periods
+ * @requires accounts
  */
 
-
-const lodash = require('lodash');
+const q = require('q');
 const db = require('../../../lib/db');
-const NotFound = require('../../../lib/errors/NotFound');
-const BadRequest = require('../../../lib/errors/BadRequest');
+const { NotFound, BadRequest } = require('../../../lib/errors');
 const types = require('./types');
-
+const categories = require('./categories');
+const Periods = require('../../../lib/period');
+const AccountExtras = require('./extra.js');
+const Fiscal = require('../fiscal.js');
+const debug = require('debug')('accounts');
 
 /**
  * @method create
@@ -37,15 +44,15 @@ const types = require('./types');
  * POST /accounts
  */
 function create(req, res, next) {
-  let data = req.body;
-  let sql = 'INSERT INTO account SET ?';
+  const data = req.body;
+  const sql = 'INSERT INTO account SET ?';
 
   delete data.id;
   data.enterprise_id = req.session.enterprise.id;
 
   db.exec(sql, [data])
-    .then(function (result) {
-      res.status(201).json({id : result.insertId});
+    .then(result => {
+      res.status(201).json({ id : result.insertId });
     })
     .catch(next)
     .done();
@@ -60,20 +67,16 @@ function create(req, res, next) {
  * PUT /accounts/:id
  */
 function update(req, res, next) {
-  let id = req.params.id;
-  let data = req.body;
-  let sql = 'UPDATE account SET ? WHERE id = ?';
+  const { id } = req.params;
+  const data = req.body;
+  const sql = 'UPDATE account SET ? WHERE id = ?';
 
   delete data.id;
 
   lookupAccount(id)
-    .then(function () {
-      return db.exec(sql, [data, id]);
-    })
-    .then(function() {
-      return lookupAccount(id);
-    })
-    .then(function (account) {
+    .then(() => db.exec(sql, [data, id]))
+    .then(() => lookupAccount(id))
+    .then((account) => {
       res.status(200).json(account);
     })
     .catch(next)
@@ -90,26 +93,25 @@ function update(req, res, next) {
  * DELETE /accounts/:id
  */
 function remove(req, res, next) {
-  const sql = `SELECT COUNT(id) AS childrens FROM account WHERE parent = ?`;
+  const sql = `SELECT COUNT(id) AS childrens FROM account WHERE parent = ?;`;
   db.exec(sql, [req.params.id])
-  .then(function (rows) {
-    if(rows[0].childrens > 0){
-      throw new BadRequest(`Could not delete the Account Id ${req.params.id}. Because this Account is Parent`);
-    }
+    .then((rows) => {
+      if (rows[0].childrens > 0) {
+        throw new BadRequest(`Could not delete account with id: ${req.params.id}. This account contains child accounts.`);
+      }
 
-    let sqlDelete = 'DELETE FROM account WHERE id = ?;';
-    return db.exec(sqlDelete, [req.params.id]);
-  })
-  .then(function (result) {
+      const sqlDelete = 'DELETE FROM account WHERE id = ?;';
+      return db.exec(sqlDelete, [req.params.id]);
+    })
+    .then(result => {
+      if (!result.affectedRows) {
+        throw new NotFound(`Could not find an Account with id ${req.params.id}.`);
+      }
 
-    if (!result.affectedRows) {
-      throw new NotFound(`Could not find an Account with id ${req.params.id}.`);
-    }
-
-    res.sendStatus(204);
-  })
-  .catch(next)
-  .done();
+      res.sendStatus(204);
+    })
+    .catch(next)
+    .done();
 }
 
 
@@ -142,21 +144,23 @@ function list(req, res, next) {
   // convert locked to a number if it exists
   if (req.query.locked) {
     locked = Number(req.query.locked);
+  } else {
+    locked = 0;
   }
 
   // if locked is a number, filter on it
-  if (!isNaN(locked)) {
+  if (!Number.isNaN(locked)) {
     sql += ` WHERE a.locked = ${locked}`;
   }
 
   sql += ` ORDER BY a.number;`;
 
   db.exec(sql)
-  .then(function (rows) {
-    res.status(200).json(rows);
-  })
-  .catch(next)
-  .done();
+    .then((rows) => {
+      res.status(200).json(rows);
+    })
+    .catch(next)
+    .done();
 }
 
 /**
@@ -169,7 +173,7 @@ function list(req, res, next) {
  */
 function detail(req, res, next) {
   lookupAccount(req.params.id)
-    .then(function (account) {
+    .then((account) => {
       res.status(200).json(account);
     })
     .catch(next)
@@ -188,9 +192,9 @@ function detail(req, res, next) {
  * GET /accounts/:id/balance
  */
 function getBalance(req, res, next) {
-  const id = req.params.id;
+  const { id } = req.params;
   let optional = '';
-  let params = [id];
+  const params = [id];
 
   // include the posting journal with a switch
   if (req.query.journal === '1') {
@@ -204,8 +208,9 @@ function getBalance(req, res, next) {
     params.push(id);
   }
 
-  let sql = `
-    SELECT t.account_id, IFNULL(SUM(t.debit), 0) AS debit, IFNULL(SUM(t.credit), 0) AS credit, IFNULL(t.balance, 0) AS balance
+  const sql = `
+    SELECT t.account_id, IFNULL(SUM(t.debit), 0) AS debit, IFNULL(SUM(t.credit), 0) AS credit,
+      IFNULL(t.balance, 0) AS balance
     FROM (
       SELECT gl.account_id, IFNULL(SUM(gl.debit), 0) AS debit,
         IFNULL(SUM(gl.credit), 0) AS credit,
@@ -216,16 +221,71 @@ function getBalance(req, res, next) {
   `;
 
   lookupAccount(id)
-    .then(function (account) {
-      return db.exec(sql, params);
-    })
-    .then(function (rows) {
-
-      let response = (rows.length === 0) ?
-        { account_id : id, debit : 0, credit : 0, balance : 0 } :
+    .then(() => db.exec(sql, params))
+    .then((rows) => {
+      const response = (rows.length === 0) ?
+        {
+          account_id : id, debit : 0, credit : 0, balance : 0,
+        } :
         rows[0];
 
       res.status(200).json(response);
+    })
+    .catch(next)
+    .done();
+}
+
+/**
+ * @function getOpeningBalanceForPeriod
+ *
+ * @description
+ * Computes the opening balance for an account based on the default period range
+ * provided by default filters.  This is useful for registries.  If you know
+ * what the date key is, it is better to call getOpeningBalanceForDate() from
+ * the AccountExtras directly with the account id and date.
+ */
+function getOpeningBalanceForPeriod(req, res, next) {
+  const period = new Periods(req.query.client_timestamp);
+  const targetPeriod = period.lookupPeriod(req.query.period);
+  const accountId = req.params.id;
+
+  debug(
+    '#getOpeningBalanceForPeriod() finding opening balance for account %s on  period %s',
+    accountId,
+    req.query.period
+  );
+
+  let promise = q();
+
+  switch (targetPeriod) {
+  case period.periods.allTime:
+    debug('#getOpeningBalanceForPeriod() all time period detected.  Using first fiscal year start date.');
+    promise = promise
+      .then(() => Fiscal.getFirstDateOfFirstFiscalYear(req.session.enterprise.id))
+      .then(fiscal => fiscal.start_date);
+    break;
+
+  case period.periods.custom:
+    debug('#getOpeningBalanceForPeriod() custom period detected.  Using custom_period_start key.');
+    promise = promise
+      .then(() => new Date(req.query.custom_period_start));
+    break;
+
+  default:
+    debug('#getOpeningBalanceForPeriod() %s period detected.  Using computed start date.', req.query.period);
+    promise = promise
+      .then(() => targetPeriod.limit.start());
+    break;
+  }
+
+  promise
+    .then(date => {
+      debug(`#getOpeningBalanceForPeriod() computed ${date} for start date.`);
+      return AccountExtras.getOpeningBalanceForDate(accountId, new Date(date));
+    })
+    .then(balances => {
+      debug('#getOpeningBalanceForPeriod() computed %j balances for account id %s.', balances, accountId);
+      res.status(200).json(balances);
     })
     .catch(next)
     .done();
@@ -255,7 +315,7 @@ function lookupAccount(id) {
   sql += id ? ' WHERE a.id = ? ORDER BY CAST(a.number AS CHAR(15)) ASC;' : ' ORDER BY CAST(a.number AS CHAR(15)) ASC;';
 
   return db.exec(sql, id)
-    .then(function(rows) {
+    .then(rows => {
       if (rows.length === 0) {
         throw new NotFound(`Could not find account with id ${id}.`);
       }
@@ -276,15 +336,15 @@ function processAccountDepth(accounts) {
   const ROOT_NODE = 0;
 
   // build the account tree
-  let tree = getChildren(accounts, ROOT_NODE);
+  const tree = getChildren(accounts, ROOT_NODE);
 
   // return a flattened tree (in order)
-  accounts = flatten(tree);
+  const processedAccounts = flatten(tree);
 
   // remove the children property after flattening to avoid recursive references
-  accounts.forEach(account => delete account.children);
+  processedAccounts.forEach(account => delete account.children);
 
-  return accounts;
+  return processedAccounts;
 }
 
 /**
@@ -294,15 +354,11 @@ function processAccountDepth(accounts) {
  * @param {number} parentId The parent id
  */
 function getChildren(accounts, parentId) {
-  let children;
-
   if (accounts.length === 0) { return null; }
 
-  children = accounts.filter(function (account) {
-    return account.parent === parentId;
-  });
+  const children = accounts.filter(account => account.parent === parentId);
 
-  children.forEach(function (account) {
+  children.forEach((account) => {
     account.children = getChildren(accounts, account.id);
   });
 
@@ -316,12 +372,12 @@ function getChildren(accounts, parentId) {
  * @param {number} depth A depth
  */
 function flatten(tree, depth) {
-  depth = isNaN(depth) ? -1 : depth;
-  depth += 1;
+  let currentDepth = Number.isNaN(depth) ? -1 : depth;
+  currentDepth += 1;
 
-  return tree.reduce(function (array, node) {
-    node.depth = depth;
-    var items = [node].concat(node.children ? flatten(node.children, depth) : []);
+  return tree.reduce((array, node) => {
+    node.depth = currentDepth;
+    const items = [node].concat(node.children ? flatten(node.children, currentDepth) : []);
     return array.concat(items);
   }, []);
 }
@@ -336,3 +392,5 @@ exports.lookupAccount = lookupAccount;
 exports.processAccountDepth = processAccountDepth;
 exports.list = list;
 exports.remove = remove;
+exports.getOpeningBalanceForPeriod = getOpeningBalanceForPeriod;
+exports.categories = categories;

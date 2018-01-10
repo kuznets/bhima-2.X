@@ -49,7 +49,7 @@ function build(req, res, next) {
  * @method financialActivities
  * Return details of financial activities of a given patient
  */
-function financialActivities(debtorUuid) {
+function financialActivities(patientUuid) {
   const data = {};
 
   const sql = `
@@ -88,25 +88,26 @@ function financialActivities(debtorUuid) {
     GROUP BY ledger.entity_uuid;
   `;
 
-  return Patients.lookupByDebtorUuid(debtorUuid)
+  return Patients.lookupPatient(patientUuid)
     .then((patient) => {
       data.patient = patient;
-      const buid = db.bid(debtorUuid);
+      const buid = db.bid(patient.debtor_uuid);
       return q.all([
         db.exec(sql, [buid, buid]),
         db.exec(aggregateQuery, [buid, buid]),
       ]);
     })
-    .spread((transactions, aggregates) => {
+    .spread((transactions, aggs) => {
+      let aggregates = aggs;
       const patient = data.patient;
 
       if (!aggregates.length) {
-        aggregates = { balance: 0 };
+        aggregates = { balance : 0 };
       } else {
         aggregates = aggregates[0];
       }
 
-      _.extend(aggregates, { hasDebitBalance: aggregates.balance > 0 });
+      _.extend(aggregates, { hasDebitBalance : aggregates.balance > 0 });
       return { transactions, patient, aggregates };
     });
 }

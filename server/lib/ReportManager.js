@@ -14,8 +14,7 @@
  * @requires path
  * @requires fs
  * @requires q
- * @requires mkdirp
- * @requires node-uuid
+ * @requires uuid/v4
  * @requires lib/helpers/translate
  * @requires lib/errors/BadRequest
  * @requires lib/errors/InternalServerError
@@ -26,8 +25,7 @@ const _ = require('lodash');
 const path = require('path');
 const fs = require('fs');
 const q = require('q');
-const mkdirp = require('mkdirp');
-const uuid = require('node-uuid');
+const uuid = require('uuid/v4');
 const translateHelper = require('./helpers/translate');
 
 const BadRequest = require('./errors/BadRequest');
@@ -39,15 +37,16 @@ const renderers = {
   json : require('./renderers/json'),
   html : require('./renderers/html'),
   pdf  : require('./renderers/pdf'),
-  csv  : require('./renderers/csv')
+  csv  : require('./renderers/csv'),
+  xlsx  : require('./renderers/xlsx'),
 };
 
 // default report configuration
 const defaults = {
-  pageSize: 'A4',
-  orientation: 'portrait',
-  lang: 'en',
-  renderer: 'pdf'
+  pageSize : 'A4',
+  orientation : 'portrait',
+  lang : 'en',
+  renderer : 'pdf',
 };
 
 // Constants
@@ -61,7 +60,6 @@ const SAVE_SQL = `
 // Class Declaration
 
 class ReportManager {
-
   /**
    * @constructor
    *
@@ -97,7 +95,7 @@ class ReportManager {
 
     // @TODO user information could be determined by report manager, removing the need for this check
     if (this.options.saveReport && !this.options.user) {
-      let invalidSaveDescription = 'Report cannot be saved without providing a `user` entity to ReportManager';
+      const invalidSaveDescription = 'Report cannot be saved without providing a `user` entity to ReportManager';
       throw new InternalServerError(invalidSaveDescription);
     }
 
@@ -128,6 +126,10 @@ class ReportManager {
     // set the render timestamp
     metadata.timestamp = new Date();
 
+    // @TODO fit this better into the code flow
+    // sanitise save report option
+    this.options.saveReport = Boolean(Number(this.options.saveReport));
+
     // merge the data object before templating
     _.merge(data, { metadata });
 
@@ -138,15 +140,16 @@ class ReportManager {
     return promise.then(reportStream => {
       this.stream = reportStream;
 
-      let renderHeaders = renderer.headers;
-      let report = reportStream;
+      const renderHeaders = renderer.headers;
+      const report = reportStream;
 
       if (this.options.filename) {
-        let translate = translateHelper(this.options.lang);
-        let translatedName = translate(this.options.filename);
-        let fileDate = (new Date()).toLocaleDateString();
-        let formattedName = `${translatedName} ${fileDate}`;
+        const translate = translateHelper(this.options.lang);
+        const translatedName = translate(this.options.filename);
+        const fileDate = (new Date()).toLocaleDateString();
+        const formattedName = `${translatedName} ${fileDate}`;
         renderHeaders['Content-Disposition'] = `filename=${formattedName}${renderer.extension}`;
+        renderHeaders.filename = `${formattedName}${renderer.extension}`;
       }
 
       // FIXME this branching logic should be promised based
@@ -155,12 +158,11 @@ class ReportManager {
         // FIXME PDF report is sent back to the client even though this is a save operation
         // FIXME Errors are not propagated
         return this.save()
-          .then(function (result) {
-            return { headers: renderHeaders, report };
+          .then(() => {
+            return { headers : renderHeaders, report };
           });
-      } else {
-        return { headers: renderHeaders, report };
       }
+      return { headers : renderHeaders, report };
     });
   }
 
@@ -181,7 +183,7 @@ class ReportManager {
     }
 
     // generate a unique id for the report name
-    const reportId = uuid.v4();
+    const reportId = uuid();
     const options = this.options;
 
     // make the report name using the
@@ -191,17 +193,17 @@ class ReportManager {
     const data = {
       uuid : db.bid(reportId),
       label : options.label,
-      link : link,
+      link,
       timestamp : new Date(),
       user_id : options.user.id,
-      report_id : options.reportId
+      report_id : options.reportId,
     };
 
     fs.writeFile(link, this.stream, (err) => {
       if (err) { return dfd.reject(err); }
 
-      db.exec(SAVE_SQL, data)
-        .then(() => dfd.resolve({ uuid: reportId }))
+      return db.exec(SAVE_SQL, data)
+        .then(() => dfd.resolve({ uuid : reportId }))
         .catch(dfd.reject)
         .done();
     });

@@ -1,21 +1,22 @@
 {
   "PERIODS" : {
     "TODAY" : "Aujourd'hui",
-    "THIS_WEEK" : "Cette semaine",
+    "THIS_WEEK" : "Cette Semaine",
     "THIS_MONTH" : "Ce Mois",
     "THIS_YEAR" : "Cette Année",
     "YESTERDAY" : "Hier",
-    "LAST_WEEK" : "Semaine derniére",
-    "LAST_MONTH" : "Mois dernier",
-    "LAST_YEAR" : "Année derniére",
+    "LAST_WEEK" : "Semaine Passé",
+    "LAST_MONTH" : "Mois Passé",
+    "LAST_YEAR" : "Année Passé",
     "ALL_TIME" : "Tout le temps",
-    "CUSTOM" : "Customizé",
+    "CUSTOM" : "Personalisé",
     "START" : "Début",
     "END" : "Fin",
-    "PERIOD_LIMIT" : "Limite de période",
+    "PERIOD_LIMIT" : "Limite de Période",
     "CUSTOM_FROM" : "de",
     "CUSTOM_TO" : "à",
-    "SELECT_PERIOD" : "Période choisie",
-    "SELECT_CUSTOM_PERIOD" : "Période personnalisée"
+    "SELECT_PERIOD" : "Choisir une Période",
+    "SELECT_CUSTOM_PERIOD" : "Période Personnalisée",
+    "SUBMIT_CUSTOM_PERIOD" : "Valider la Période"
   }
 }

@@ -1,7 +1,7 @@
 angular.module('bhima.services')
-.service('util', UtilService);
+  .service('util', UtilService);
 
-UtilService.$inject = ['moment' ];
+UtilService.$inject = ['moment'];
 
 /**
  * @class util
@@ -17,6 +17,17 @@ function UtilService(moment) {
   service.unwrapHttpResponse = function unwrapHttpResponse(response) {
     return response.data;
   };
+
+  service.formatDate = function (date, format) {
+    var f = format || 'DD/MM/YYYY HH:mm:ss';
+    if (date) {
+      return moment(date).format(f);
+    } else {
+      return null;
+    }
+  }
+
+
 
   /** @todo comments showing usage */
   service.filterFormElements = function filterFormElements(formDefinition, requireDirty) {
@@ -95,7 +106,9 @@ function UtilService(moment) {
 
     return function () {
 
-      if (!fn) { return; }
+      if (!fn) {
+        return;
+      }
 
       // call the function only once
       result = fn.apply(context || this, arguments);
@@ -176,7 +189,7 @@ function UtilService(moment) {
    * @param {array} array An array in which we want to get only unique values
    * @description return an array which contain only unique values
    */
-  service.uniquelize = function uniquelize (array) {
+  service.uniquelize = function uniquelize(array) {
     return array.filter(function (value, idx, array) {
       return array.indexOf(value) === idx;
     });
@@ -199,8 +212,58 @@ function UtilService(moment) {
    * @returns {Boolean} - the result
    */
   service.xor = function xor(a, b) {
-     return !a !== !b;
+    return !a !== !b;
   };
+
+  /**
+   * @function maskObjectFromKeys
+   *
+   * @description
+   * This function will filter or "mask" an object, returning a new object with only
+   * key/value pairs matching the array of keys passed in as the second parameter.  The
+   * keys do not all have to be contained in the object.
+   *
+   * @param {Object} object - an existing object
+   * @param {Array} mask - an array of (string) keys to mask
+   *
+   * @returns {Object} - a new object contain key/value pairs corresponding
+   * to only the keys specified.
+   */
+  service.maskObjectFromKeys = function maskObjectFromKeys(object, mask) {
+    return Object.keys(object)
+
+      //  for each key, if the key exists in the mask, add the k/v pair to the
+      //  screened object.
+      .reduce(function (screenedObject, key) {
+        if (mask.indexOf(key) >= 0) {
+          screenedObject[key] = object[key];
+        }
+
+        return screenedObject;
+      }, {});
+  };
+
+  // Returns a function, that, as long as it continues to be invoked, will not
+  // be triggered. The function will be called after it stops being called for
+  // N milliseconds. If `immediate` is passed, trigger the function on the
+  // leading edge, instead of the trailing.
+  function debounce(func, wait, immediate) {
+    var timeout;
+    return function () {
+      var context = this;
+      var args = arguments;
+      var later = function () {
+        timeout = null;
+        if (!immediate) func.apply(context, args);
+      };
+      var callNow = immediate && !timeout;
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+      if (callNow) func.apply(context, args);
+    };
+  }
+
+  service.debounce = debounce;
 
   service.arrayIncludes = function arrayIncludes(array, values) {
     return values.some(function (value) {

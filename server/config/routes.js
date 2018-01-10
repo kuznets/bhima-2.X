@@ -5,9 +5,8 @@
  * This file initializes the links between route controllers and the express
  * HTTP server.
  *
- * @todo Pass authenticate and authorize middleware down through
- * controllers, allowing for modules to subscribe to different
- * levels of authority
+ * @todo Pass authenticate and authorize middleware down through controllers,
+ * allowing for modules to subscribe to different levels of authority
  *
  * @requires winston
  * @requires uploader
@@ -22,12 +21,12 @@ const tree = require('../controllers/tree');
 const units = require('../controllers/units');
 const system = require('../controllers/system');
 const report = require('../controllers/report');
+const install = require('../controllers/install');
 
 // admin routes
 const users = require('../controllers/admin/users');
 const projects = require('../controllers/admin/projects');
 const enterprises = require('../controllers/admin/enterprises');
-const employees = require('../controllers/admin/employees');
 const services = require('../controllers/admin/services');
 const suppliers = require('../controllers/admin/suppliers');
 const functions = require('../controllers/admin/functions');
@@ -43,42 +42,38 @@ const snis = require('../controllers/medical/snis');
 const medicalReports = require('../controllers/medical/reports');
 const diagnoses = require('../controllers/medical/diagnoses');
 
+// human resources routes
+const employees = require('../controllers/payroll/employees');
+const employeeReports = require('../controllers/payroll/reports');
+
 // stock and inventory routes
-const inventory            = require('../controllers/inventory');
-const depots               = require('../controllers/inventory/depots');
-const inventoryReports     = require('../controllers/inventory/reports');
-const stock                = require('../controllers/stock');
-const stockReports         = require('../controllers/stock/reports');
+const inventory = require('../controllers/inventory');
+const depots = require('../controllers/inventory/depots');
+const inventoryReports = require('../controllers/inventory/reports');
+const stock = require('../controllers/stock');
+const stockReports = require('../controllers/stock/reports');
 
 // finance routes
 const trialBalance = require('../controllers/finance/trialBalance');
-const ledger = require('../controllers/finance/ledger');
 const fiscal = require('../controllers/finance/fiscal');
+const fiscalPeriod = require('../controllers/finance/fiscalPeriod');
 const gl = require('../controllers/finance/ledgers/general');
 const purchases = require('../controllers/finance/purchases');
-const taxPayment = require('../controllers/finance/taxPayment');
 const debtors = require('../controllers/finance/debtors');
 const cashboxes = require('../controllers/finance/cashboxes');
 const exchange = require('../controllers/finance/exchange');
 const cash = require('../controllers/finance/cash');
 const priceList = require('../controllers/finance/priceList');
-const billingServices = require('../controllers/finance/billingServices');
+const invoicingFees = require('../controllers/finance/invoicingFees');
 const accounts = require('../controllers/finance/accounts');
-const costCenter = require('../controllers/finance/costCenter');
-const profitCenter = require('../controllers/finance/profitCenter');
-const reference = require('../controllers/finance/reference');
 const subsidies = require('../controllers/finance/subsidies');
 const patientInvoice = require('../controllers/finance/patientInvoice');
 const financeReports = require('../controllers/finance/reports');
 const discounts = require('../controllers/finance/discounts');
-const payroll = require('../controllers/finance/payroll');
 const debtorGroups = require('../controllers/finance/debtors/groups');
 const currencies = require('../controllers/finance/currencies');
 const vouchers = require('../controllers/finance/vouchers');
 const creditorGroups = require('../controllers/finance/creditorGroups');
-const referenceGroup = require('../controllers/finance/referenceGroup');
-const sectionResultats = require('../controllers/finance/sectionResultat');
-const sectionBilans = require('../controllers/finance/sectionBilan');
 const creditors = require('../controllers/finance/creditors.js');
 const journal = require('../controllers/finance/journal');
 const transactionType = require('../controllers/admin/transactionType');
@@ -87,6 +82,10 @@ const financialPatient = require('../controllers/finance/patient');
 
 const dashboardDebtors = require('../controllers/dashboard/debtorGroups');
 const stats = require('../controllers/dashboard/stats');
+const transactions = require('../controllers/finance/transactions');
+
+// looking up an entity by it reference
+const referenceLookup = require('../lib/referenceLookup');
 
 // expose routes to the server.
 exports.configure = function configure(app) {
@@ -143,22 +142,22 @@ exports.configure = function configure(app) {
   app.post('/accounts/types', accounts.types.create);
   app.put('/accounts/types/:id', accounts.types.update);
   app.delete('/accounts/types/:id', accounts.types.remove);
-  app.delete('/accounts/:id', accounts.remove);
+
+  // API for account categories routes CRUD
+  app.get('/accounts/categories', accounts.categories.list);
+  app.get('/accounts/categories/:id', accounts.categories.detail);
+  app.post('/accounts/categories', accounts.categories.create);
+  app.put('/accounts/categories/:id', accounts.categories.update);
+  app.delete('/accounts/categories/:id', accounts.categories.remove);
 
   // API for account routes crud
   app.get('/accounts', accounts.list);
   app.get('/accounts/:id', accounts.detail);
   app.get('/accounts/:id/balance', accounts.getBalance);
+  app.get('/accounts/:id/openingBalance', accounts.getOpeningBalanceForPeriod);
   app.post('/accounts', accounts.create);
   app.put('/accounts/:id', accounts.update);
-
-  // API for cost_center routes CRUD
-  app.get('/cost_centers', costCenter.list);
-  app.get('/cost_centers/:id', costCenter.detail);
-  app.get('/cost_centers/:id/cost', costCenter.getCostValue);
-  app.post('/cost_centers', costCenter.create);
-  app.put('/cost_centers/:id', costCenter.update);
-  app.delete('/cost_centers/:id', costCenter.remove);
+  app.delete('/accounts/:id', accounts.remove);
 
   // API for service routes
   app.post('/services', services.create);
@@ -166,42 +165,6 @@ exports.configure = function configure(app) {
   app.get('/services/:id', services.detail);
   app.put('/services/:id', services.update);
   app.delete('/services/:id', services.remove);
-
-  // API for profit_center routes crud
-  app.get('/profit_centers', profitCenter.list);
-  app.get('/profit_centers/:id', profitCenter.detail);
-  app.get('/profit_centers/:id/profit', profitCenter.getProfitValue);
-  app.post('/profit_centers', profitCenter.create);
-  app.put('/profit_centers/:id', profitCenter.update);
-  app.delete('/profit_centers/:id', profitCenter.remove);
-
-  // API for reference routes crud
-  app.get('/references', reference.list);
-  app.get('/references/:id', reference.detail);
-  app.post('/references', reference.create);
-  app.put('/references/:id', reference.update);
-  app.delete('/references/:id', reference.remove);
-
-  // API for section resultats crud
-  app.get('/section_resultats', sectionResultats.list);
-  app.get('/section_resultats/:id', sectionResultats.detail);
-  app.post('/section_resultats', sectionResultats.create);
-  app.put('/section_resultats/:id', sectionResultats.update);
-  app.delete('/section_resultats/:id', sectionResultats.remove);
-
-  // API for section bilans crud
-  app.get('/section_bilans', sectionBilans.list);
-  app.get('/section_bilans/:id', sectionBilans.detail);
-  app.post('/section_bilans', sectionBilans.create);
-  app.put('/section_bilans/:id', sectionBilans.update);
-  app.delete('/section_bilans/:id', sectionBilans.remove);
-
-  // API for reference group crud
-  app.get('/reference_group', referenceGroup.list);
-  app.get('/reference_group/:id', referenceGroup.detail);
-  app.post('/reference_group', referenceGroup.create);
-  app.put('/reference_group/:id', referenceGroup.update);
-  app.delete('/reference_group/:id', referenceGroup.remove);
 
   // API for subsidies routes crud
   app.get('/subsidies', subsidies.list);
@@ -213,24 +176,23 @@ exports.configure = function configure(app) {
   // API for journal
   app.get('/journal', journal.list);
   app.get('/journal/count', journal.count);
+
+  // API for trial balance
+  app.post('/journal/trialbalance', trialBalance.runTrialBalance);
+  app.post('/journal/transactions', trialBalance.postToGeneralLedger);
+
+  // API for journal
   app.get('/journal/:record_uuid', journal.getTransaction);
   app.post('/journal/:record_uuid/edit', journal.editTransaction);
   app.post('/journal/:uuid/reverse', journal.reverse);
+  app.put('/transactions/comments', transactions.commentTransactions);
 
   // API for general ledger
   app.get('/general_ledger', generalLedger.list);
   app.get('/general_ledger/accounts', generalLedger.listAccounts);
 
-  // API for trial balance
-  app.post('/trial_balance/data_per_account', trialBalance.getDataPerAccount);
-  app.post('/trial_balance/checks', trialBalance.checkTransactions);
-  app.post('/trial_balance/post_transactions', trialBalance.postToGeneralLedger);
-
-  // ledger routes
-  // TODO : needs renaming
-  app.get('/ledgers/debtor/:id', ledger.compileDebtorLedger);
-  app.get('/ledgers/debtor_group/:id', ledger.compileGroupLedger);
-  app.get('/ledgers/employee_invoice/:id', ledger.compileEmployeeLedger);
+  app.get('/transactions/:uuid/history', journal.getTransactionEditHistory);
+  app.delete('/transactions/:uuid', transactions.deleteTransaction);
 
   /* fiscal year controller */
   app.get('/fiscal', fiscal.list);
@@ -243,6 +205,9 @@ exports.configure = function configure(app) {
   app.put('/fiscal/:id', fiscal.update);
   app.delete('/fiscal/:id', fiscal.remove);
 
+  // Period routes
+  app.get('/periods', fiscalPeriod.list);
+
   /* load a user's tree */
   app.get('/tree', tree.generate);
 
@@ -250,29 +215,16 @@ exports.configure = function configure(app) {
   app.get('/snis/healthZones', snis.healthZones);
 
   // Employee management
-  app.get('/employee_list/', employees.list);
   app.get('/holiday_list/:pp/:employee_id', employees.listHolidays);
   app.get('/getCheckHollyday/', employees.checkHoliday);
   app.get('/getCheckOffday/', employees.checkOffday);
 
-  app.get('available_payment_period/', taxPayment.availablePaymentPeriod);
-  app.put('/setTaxPayment/', taxPayment.setTaxPayment);
-
-  // Payroll
-  app.get('/getDataPaiement/', payroll.listPaiementData);
-  app.get('/getEmployeePayment/:id', payroll.listPaymentByEmployee);
-  app.get('/getEnterprisePayment/:employee_id', payroll.listPaymentByEnterprise);
-  app.put('/setCotisationPayment/', payroll.setCotisationPayment);
-  app.get('/getEmployeeCotisationPayment/:id', payroll.listEmployeeCotisationPayments);
-  app.get('/taxe_ipr_currency/', payroll.listTaxCurrency);
-
   /*  Inventory and Stock Management */
   app.post('/inventory/metadata', inventory.createInventoryItems);
   app.get('/inventory/metadata', inventory.getInventoryItems);
-  app.get('/inventory/metadata/search', inventory.searchInventoryItems);
   app.get('/inventory/metadata/:uuid', inventory.getInventoryItemsById);
   app.put('/inventory/metadata/:uuid', inventory.updateInventoryItems);
-
+  app.delete('/inventory/metadata/:uuid', inventory.deleteInventory);
   // route for inventory list receipt
 
   /**
@@ -358,13 +310,16 @@ exports.configure = function configure(app) {
   app.get('/currencies/:id', currencies.detail);
 
   // Patient invoice API
-  app.get('/invoices', patientInvoice.list);
+  app.get('/invoices', patientInvoice.read);
   app.post('/invoices', patientInvoice.create);
-  app.get('/invoices/search', patientInvoice.search);
   app.get('/invoices/:uuid', patientInvoice.detail);
   app.get('/invoices/:uuid/balance', patientInvoice.balance);
 
-  // route for invoice Report
+  // interface for linking entities, it renders a report for a particular entity
+  app.get('/referenceLookup/:codeRef/:language', referenceLookup.getEntity);
+
+  // interface for employee report
+  app.get('/reports/payroll/employees', employeeReports.employeeRegistrations);
 
   // reports API: Invoices (receipts)
   app.get('/reports/medical/patients', medicalReports.patientRegistrations);
@@ -388,14 +343,17 @@ exports.configure = function configure(app) {
   app.get('/reports/finance/cashflow/services', financeReports.cashflow.byService);
   app.get('/reports/finance/financialPatient/:uuid', financeReports.patient);
   app.get('/reports/finance/income_expense', financeReports.incomeExpense.document);
+  app.get('/reports/finance/cash_report', financeReports.cashReport.document);
   app.get('/reports/finance/balance', financeReports.balance.document);
-  app.get('/reports/finance/account', financeReports.reportAccounts.document);
+  app.get('/reports/finance/balance_sheet', financeReports.balanceSheet.document);
+  app.get('/reports/finance/account_report', financeReports.reportAccounts.document);
   app.get('/reports/finance/journal', financeReports.journal.postingReport);
-  app.get('/reports/finance/posted_journal', financeReports.journal.postedReport);
+  app.get('/reports/finance/account_statement', financeReports.accountStatement.report);
   app.get('/reports/finance/clientsReport', financeReports.clientsReport.document);
   app.get('/reports/finance/general_ledger/', financeReports.generalLedger.report);
   app.get('/reports/finance/general_ledger/:account_id', financeReports.generalLedger.accountSlip);
   app.get('/reports/finance/creditors/aged', financeReports.creditors.aged);
+  app.get('/reports/finance/purchases', financeReports.purchases.report);
 
   app.get('/reports/keys/:key', report.keys);
 
@@ -404,6 +362,7 @@ exports.configure = function configure(app) {
 
   // lookup saved report document
   app.get('/reports/archive/:uuid', report.sendArchived);
+  app.post('/reports/archive/:uuid/email', report.emailArchived);
   app.delete('/reports/archive/:uuid', report.deleteArchived);
 
   app.get('/dashboard/debtors', dashboardDebtors.getReport);
@@ -415,15 +374,13 @@ exports.configure = function configure(app) {
   app.put('/patients/groups/:uuid', patientGroups.update);
   app.delete('/patients/groups/:uuid', patientGroups.remove);
 
-  app.get('/patients/search', patients.search);
-
   // route specifically for quick searches on patient name, it will return minimal info
   app.get('/patients/search/name', patients.searchByName);
 
   app.get('/patients/visits', patients.visits.list);
 
   // Patients API
-  app.get('/patients', patients.list);
+  app.get('/patients', patients.read);
   app.post('/patients', patients.create);
   app.get('/patients/:uuid', patients.detail);
   app.put('/patients/:uuid', patients.update);
@@ -432,7 +389,7 @@ exports.configure = function configure(app) {
 
   app.get('/patients/hospital_number/:id/exists', patients.hospitalNumberExists);
 
-  app.get('/patients/:uuid/services', patients.billingServices);
+  app.get('/patients/:uuid/services', patients.invoicingFees);
   app.get('/patients/:uuid/subsidies', patients.subsidies);
 
   app.get('/patients/:uuid/documents', patients.documents.list);
@@ -480,12 +437,17 @@ exports.configure = function configure(app) {
   app.get('/users', users.list);
   app.post('/users', users.create);
   app.get('/users/:id', users.detail);
+  app.get('/users/:username/exists', users.exists);
   app.put('/users/:id', users.update);
   app.delete('/users/:id', users.delete);
   app.get('/users/:id/projects', users.projects.list);
   app.get('/users/:id/permissions', users.permissions.list);
   app.post('/users/:id/permissions', users.permissions.create);
+  app.get('/users/:id/depots', users.depots.list);
+  app.post('/users/:id/depots', users.depots.create);
   app.put('/users/:id/password', users.password);
+  app.get('/users/:id/cashboxes', users.cashboxes.list);
+  app.post('/users/:id/cashboxes', users.cashboxes.create);
 
   // projects controller
   app.get('/projects/:id', projects.detail);
@@ -495,6 +457,10 @@ exports.configure = function configure(app) {
 
   // cashbox controller
   app.get('/cashboxes', cashboxes.list);
+
+  // cashbox privileges
+  app.get('/cashboxes/privileges', cashboxes.privileges);
+
   app.get('/cashboxes/:id', cashboxes.detail);
   app.post('/cashboxes', cashboxes.create);
   app.put('/cashboxes/:id', cashboxes.update);
@@ -514,12 +480,10 @@ exports.configure = function configure(app) {
   app.delete('/prices/:uuid', priceList.delete);
 
   // cash API
-  app.get('/cash', cash.list);
-  app.get('/cash/search', cash.search);
+  app.get('/cash', cash.read);
   app.get('/cash/:uuid', cash.detail);
   app.post('/cash', cash.create);
   app.put('/cash/:uuid', cash.update);
-  app.get('/cash/references/:reference', cash.reference);
   app.get('/cash/checkin/:invoiceUuid', cash.checkInvoicePayment);
 
   // Enterprises api
@@ -529,20 +493,18 @@ exports.configure = function configure(app) {
   app.put('/enterprises/:id', enterprises.update);
 
   // employees
+  app.get('/employees/search', employees.search);
   app.get('/employees', employees.list);
   app.get('/employees/:id', employees.detail);
-
-  // @todo - use query strings
-  app.get('/employees/:key/:value', employees.search);
-  app.put('/employees/:id', employees.update);
   app.post('/employees', employees.create);
+  app.put('/employees/:id', employees.update);
 
   // billing services
-  app.get('/billing_services', billingServices.list);
-  app.get('/billing_services/:id', billingServices.detail);
-  app.post('/billing_services', billingServices.create);
-  app.put('/billing_services/:id', billingServices.update);
-  app.delete('/billing_services/:id', billingServices.delete);
+  app.get('/invoicing_fees', invoicingFees.list);
+  app.get('/invoicing_fees/:id', invoicingFees.detail);
+  app.post('/invoicing_fees', invoicingFees.create);
+  app.put('/invoicing_fees/:id', invoicingFees.update);
+  app.delete('/invoicing_fees/:id', invoicingFees.delete);
 
   // discounts
   app.get('/discounts', discounts.list);
@@ -567,6 +529,7 @@ exports.configure = function configure(app) {
   app.post('/purchases', purchases.create);
   app.get('/purchases', purchases.list);
   app.get('/purchases/search', purchases.search);
+  app.get('/purchases/purchaseState', purchases.purchaseState);
   app.get('/purchases/:uuid', purchases.detail);
   app.put('/purchases/:uuid', purchases.update);
   app.get('/purchases/:uuid/stock_status', purchases.stockStatus);
@@ -605,15 +568,13 @@ exports.configure = function configure(app) {
 
   // @todo - this should use the JSON renderer instead of it's own route!
   app.get('/finance/cashflow', financeReports.cashflow.report);
-  app.get('/finance/incomeExpense', financeReports.incomeExpense.report);
 
-  // stock flux 
+  // stock flux
   app.get('/stock/flux', stock.listStockFlux);
 
-  // stock management API 
+  // stock management API
   app.post('/stock/lots/movements', stock.createMovement);
   app.get('/stock/lots/movements', stock.listLotsMovements);
-
   app.post('/stock/lots', stock.createStock);
   app.get('/stock/lots', stock.listLots);
   app.get('/stock/lots/origins', stock.listLotsOrigins);
@@ -624,10 +585,11 @@ exports.configure = function configure(app) {
   // stock integration
   app.post('/stock/integration', stock.createIntegration);
 
-  // stock reports API 
+  // stock reports API
   app.get('/reports/stock/lots', stockReports.stockLotsReport);
   app.get('/reports/stock/movements', stockReports.stockMovementsReport);
   app.get('/reports/stock/inventories', stockReports.stockInventoriesReport);
+  app.get('/reports/stock/inventory', stockReports.stockInventoryReport);
 
   // stock receipts API
   app.get('/receipts/stock/exit_patient/:document_uuid', stockReports.stockExitPatientReceipt);
@@ -638,8 +600,20 @@ exports.configure = function configure(app) {
   app.get('/receipts/stock/entry_depot/:document_uuid', stockReports.stockEntryDepotReceipt);
   app.get('/receipts/stock/entry_purchase/:document_uuid', stockReports.stockEntryPurchaseReceipt);
   app.get('/receipts/stock/entry_integration/:document_uuid', stockReports.stockEntryIntegrationReceipt);
+  app.get('/receipts/stock/entry_donation/:document_uuid', stockReports.stockEntryDonationReceipt);
 
   app.get('/receipts/stock/adjustment/:document_uuid', stockReports.stockAdjustmentReceipt);
+
+  // stock consumption API
+  app.get('/stock/consumptions/average/:periodId', stock.getStockConsumptionAverage);
+  app.get('/stock/consumptions/:periodId', stock.getStockConsumption);
+
+  // stock transfers
+  app.get('/stock/transfers', stock.getStockTransfers);
+
+  // install
+  app.get('/install', install.checkBasicInstallExist);
+  app.post('/install', install.proceedInstall);
 
   app.get('/diagnoses', diagnoses.list);
 };

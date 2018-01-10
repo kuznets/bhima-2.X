@@ -1,3 +1,4 @@
+/* eslint class-methods-use-this:off */
 /**
  * @overview
  * This library is responsible for constructing and exposing the Topic class
@@ -14,16 +15,24 @@
  *
  * @requires lodash
  * @requires ioredis
- * @requires winston
+ * @requires debug
  * @requires db
  */
 
 const _ = require('lodash');
 const Redis = require('ioredis');
-const winston = require('winston');
-const db = require('./db');
+const debug = require('debug')('app:topic');
+// const db = require('./db');
 
 const hasEventsEnabled = (process.env.ENABLE_EVENTS === 'true');
+if (!hasEventsEnabled) {
+  debug('publish and subscribe are disabled.  Enabled by setting ENABLE_EVENTS to true.');
+} else {
+  debug('publish and subscribe are enabled.  Disable by setting ENABLE_EVENTS to true.');
+}
+
+const hasEventsLogEnabled = hasEventsEnabled &&
+  (process.env.ENABLE_EVENTS_LOG === 'true');
 
 // event constants
 const events = {
@@ -66,10 +75,12 @@ const channels = {
 
 // writes events into the event database table
 function databaseLogger(data) {
+  if (!hasEventsLogEnabled) {
+    return;
+  }
+
   if (!data.entity) {
-    throw new Error(
-      `[topic] The event ${data.event} expected an entity, but got ${data.entity} instead.`
-    );
+    throw new Error(`[topic] The event ${data.event} expected an entity, but got ${data.entity} instead.`);
   }
 
   const record = {
@@ -83,9 +94,8 @@ function databaseLogger(data) {
 
   // this is cheeky substitution, but works.  Eventually we can standardize this using lodash
   // template strings
-  winston.verbose(
-    `[${record.channel}] ${data.user || record.user_id} ${record.type}ed a ${record.entity}.`
- );
+  //
+  debug(`[${record.channel}] ${data.user || record.user_id} ${record.type}ed a ${record.entity}.`);
 
   /*
    * @todo - in a week of operation on a small scale ~600 events were
@@ -154,7 +164,6 @@ function deserialize(data) {
  * Topic.unsubscribe(Topic.channels.ALL);
  */
 class Topic {
-
   /**
    * @constructor
    *
@@ -221,11 +230,13 @@ class Topic {
     if (this.disabled) { return; }
 
     this.subscriber.subscribe(channel, (err, count) => {
-      winston.info(`Subscription count on channel [${channel}] is now [${count}].`);
+      debug(`Subscription count on channel [${channel}] is now [${count}].`);
     });
 
     // open a subscription to the channel
-    const subscription = (chnl, data) => callback(deserialize(data));
+    const subscription = (chnl, data) =>
+      chnl === channel && callback(deserialize(data));
+
     this.subscriber.on('message', subscription);
   }
 
@@ -239,25 +250,28 @@ class Topic {
    */
   unsubscribe(channel, subscription) {
     if (this.disabled) { return; }
+
+    debug(`Unsubscribing a listener from ${channel}.`);
+
     this.subscriber.unsubscribe(channel);
     this.subscriber.removeListener('message', subscription);
   }
 
-  /** possible channels to subscribe to using the subscribe() method */
+  /* possible channels to subscribe to using the subscribe() method */
   get channels() {
     return channels;
   }
 
-  /** event constants for emitters to consume (defined above) */
+  /* event constants for emitters to consume (defined above) */
   get events() {
     return events;
   }
 
-  /** entities that could be affected by the events */
+  /* entities that could be affected by the events */
   get entities() {
     return entities;
   }
 }
 
-/** export a singleton Event Emitter */
+/* export a singleton Event Emitter */
 module.exports = new Topic();

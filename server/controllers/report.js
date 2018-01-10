@@ -9,25 +9,34 @@
  * @requires path
  * @requires fs
  * @requires db
+ * @requires debug
+ * @requires moment
+ * @requires lib/barcode
+ * @requires lib/errors/BadRequest
+ * @requires lib/mailer
  */
 
-const path = require('path');
+// const path = require('path');
 const fs = require('fs');
 const db = require('../lib/db');
 const barcode = require('../lib/barcode');
 const BadRequest = require('../lib/errors/BadRequest');
+const moment = require('moment');
+const mailer = require('../lib/mailer');
+const debug = require('debug')('reports');
 
 exports.keys = keys;
 exports.list = list;
 exports.sendArchived = sendArchived;
 exports.deleteArchived = deleteArchived;
+exports.emailArchived = emailArchived;
 
 exports.barcodeLookup = barcodeLookup;
 exports.barcodeRedirect = barcodeRedirect;
 
 // the global report path
 // @TODO This will have to factor in the type of report - report uuid can be looked up in `saved_report` table
-const REPORT_PATH = path.resolve(path.join(__dirname, '../reports/'));
+// const REPORT_PATH = path.resolve(path.join(__dirname, '../reports/'));
 
 /**
  * @function keys
@@ -39,26 +48,29 @@ const REPORT_PATH = path.resolve(path.join(__dirname, '../reports/'));
  * GET /reports/keys/:key
  */
 function keys(req, res, next) {
-  let key = req.params.key;
-  let sql = `SELECT * FROM report WHERE report_key = ?;`;
+  const { key } = req.params;
+  const sql = `SELECT * FROM report WHERE report_key = ?;`;
 
   db.exec(sql, [key])
-    .then(function (keyDetail) {
+    .then(keyDetail => {
       res.status(200).json(keyDetail);
     })
     .catch(next)
     .done();
 }
 
-function fetchReport(uuid) {
-  let sql = `
-    SELECT BUID(saved_report.uuid) AS uuid, label, report_id, parameters, saved_report.link, timestamp, user_id, user.display_name
-    FROM saved_report LEFT JOIN user ON saved_report.user_id = user.id
-    WHERE report_id = ?;
-  `;
-
-  return db.exec(sql, [uuid]);
-}
+// function fetchReport(uuid) {
+//   let sql = `
+//     SELECT
+//       BUID(saved_report.uuid) AS uuid, label, report_id, parameters,
+//       saved_report.link, timestamp, user_id, user.display_name
+//     FROM
+//       saved_report
+//     LEFT JOIN user ON saved_report.user_id = user.id
+//     WHERE report_id = ?;
+//   `;
+//   return db.exec(sql, [uuid]);
+// }
 
 /**
  * @function list
@@ -69,11 +81,17 @@ function fetchReport(uuid) {
  * GET /reports/saved/:reportId
  */
 function list(req, res, next) {
-  let reportId = req.params.reportId;
-  let sql = 'SELECT BUID(saved_report.uuid) as uuid, `label`, `report_id`, `parameters`, `link`, `timestamp`, `user_id`, user.display_name FROM saved_report left join user on saved_report.user_id = user.id WHERE report_id = ?';
+  const { reportId } = req.params;
+  const sql = `
+    SELECT
+      BUID(saved_report.uuid) as uuid, label, report_id,
+      parameters, link, timestamp, user_id,
+      user.display_name
+    FROM saved_report left join user on saved_report.user_id = user.id
+    WHERE report_id = ?`;
 
   db.exec(sql, [reportId])
-    .then(function (results) {
+    .then(results => {
       res.status(200).json(results);
     })
     .catch(next)
@@ -90,7 +108,7 @@ function list(req, res, next) {
  * @returns {Promise} - the report record
  */
 function lookupArchivedReport(uuid) {
-  let sql = `
+  const sql = `
     SELECT BUID(saved_report.uuid) as uuid, label, report_id, parameters, link,
       timestamp, user_id, user.display_name
     FROM saved_report left join user on saved_report.user_id = user.id
@@ -133,13 +151,80 @@ function deleteArchived(req, res, next) {
   lookupArchivedReport(req.params.uuid)
     .then(report => {
       filePath = report.link;
-      return db.exec('DELETE FROM saved_report WHERE uuid = ?;', [ db.bid(req.params.uuid) ]);
+      return db.exec('DELETE FROM saved_report WHERE uuid = ?;', [db.bid(req.params.uuid)]);
     })
     .then(() => {
       fs.unlink(filePath, err => {
-        if (err) { return next(err); }
+        if (err) {
+          next(err);
+          return;
+        }
         res.sendStatus(204);
       });
+    })
+    .catch(next)
+    .done();
+}
+
+// TODO(@jniles) - translate these emails into multiple languages
+const REPORT_EMAIL =
+`Hello!
+
+Please find the attached report "%filename%" produced by %user% on %date%.
+
+This email was requested by %requestor%.
+
+Thanks,
+bhi.ma
+`;
+
+// this is a really quick and lazy templating scheme
+const template = (str, values) => {
+  return Object.keys(values).reduce((formatted, key) =>
+    formatted.replace(`%${key}%`, values[key]), str);
+};
+
+
+/**
+ * @function emailArchived
+ *
+ * @description
+ * Emails an archived report to an email address provided in the "to" field.
+ */
+function emailArchived(req, res, next) {
+  const { uuid } = req.params;
+  const { address } = req.body;
+
+  debug(`#emailArchived(): Received email request for ${address}.`);
+
+  lookupArchivedReport(uuid)
+    .then(report => {
+      debug(`#emailArchived(): sending ${report.label} to ${address}.`);
+
+      const date = moment(report.timestamp).format('YYYY-MM-DD');
+      const filename = `${report.label}.pdf`;
+
+      const attachments = [
+        { filename, path : report.link },
+      ];
+
+      // template parameters for the email
+      const parameters = {
+        filename,
+        date,
+        user : report.display_name,
+        requestor : req.session.user.display_name,
+      };
+
+      // template in the parameters into message body
+      const message = template(REPORT_EMAIL, parameters);
+      const subject = `${report.label} - ${date}`;
+
+      return mailer.email(address, subject, message, { attachments });
+    })
+    .then(() => {
+      debug(`#emailArchived(): email sent to ${address}.`);
+      res.sendStatus(200);
     })
     .catch(next)
     .done();
@@ -148,7 +233,7 @@ function deleteArchived(req, res, next) {
 // Method to return the object
 // Method to redirect
 function barcodeLookup(req, res, next) {
-  let key = req.params.key;
+  const { key } = req.params;
 
   barcode.reverseLookup(key)
     .then(result => res.send(result))
@@ -157,7 +242,7 @@ function barcodeLookup(req, res, next) {
 }
 
 function barcodeRedirect(req, res, next) {
-  let key = req.params.key;
+  const { key } = req.params;
 
   barcode.reverseLookup(key)
     // populated by barcode controller

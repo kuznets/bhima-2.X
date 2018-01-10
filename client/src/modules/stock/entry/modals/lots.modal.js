@@ -8,145 +8,151 @@ StockDefineLotsModalController.$inject = [
 
 function StockDefineLotsModalController(Instance, Notify, uiGridConstants, Data, Session) {
   var vm = this;
-
-  // globals
-  vm.inventory = { lots: [] };
-  vm.gridApi = {};
+  var current = new Date();
   vm.enterprise = Session.enterprise;
+  vm.stockLine = Data.stockLine;
   vm.entryType = Data.entry_type;
-
-  /* ======================= Grid configurations ============================ */
+  vm.gridApi = {};
+  vm.isCostEditable = (vm.entryType !== 'purchase' && vm.entryType !== 'transfer_reception');
+  
   vm.gridOptions = {
-    appScopeProvider  : vm,
-    enableSorting     : false,
-    enableColumnMenus : false,
-    showColumnFooter  : true,
-    fastWatch         : true,
-    flatEntityAccess  : true,
-    columnDefs        : [
-      { field        : 'status',
-        width        : 25,
-        displayName  : '',
-        cellTemplate : 'modules/stock/entry/modals/templates/lot.status.tmpl.html' },
+    appScopeProvider: vm,
+    enableSorting: false,
+    enableColumnMenus: false,
+    showColumnFooter: true,
+    fastWatch: true,
+    flatEntityAccess: true,
+    columnDefs: [
+      {
+        field: 'status',
+        width: 25,
+        displayName: '',
+        cellTemplate: 'modules/stock/entry/modals/templates/lot.status.tmpl.html'
+      },
 
-      { field            : 'lot',
-        displayName      : 'TABLE.COLUMNS.LOT',
-        headerCellFilter : 'translate',
-        aggregationType  : uiGridConstants.aggregationTypes.count,
-        cellTemplate     : 'modules/stock/entry/modals/templates/lot.input.tmpl.html' },
+      {
+        field: 'lot',
+        displayName: 'TABLE.COLUMNS.LOT',
+        headerCellFilter: 'translate',
+        aggregationType: uiGridConstants.aggregationTypes.count,
+        aggregationHideLabel: true,
+        cellTemplate: 'modules/stock/entry/modals/templates/lot.input.tmpl.html'
+      },
 
-      { field            : 'quantity',
-        width            : 150,
-        displayName      : 'TABLE.COLUMNS.QUANTITY',
-        headerCellFilter : 'translate',
-        aggregationType  : uiGridConstants.aggregationTypes.sum,
-        footerCellClass  : 'text-right',
-        cellTemplate     : 'modules/stock/entry/modals/templates/lot.quantity.tmpl.html' },
+      {
+        field: 'quantity',
+        type: 'number',
+        width: 150,
+        displayName: 'TABLE.COLUMNS.QUANTITY',
+        headerCellFilter: 'translate',
+        aggregationType: uiGridConstants.aggregationTypes.sum,
+        aggregationHideLabel: true,
+        footerCellClass: 'text-right',
+        cellTemplate: 'modules/stock/entry/modals/templates/lot.quantity.tmpl.html'
+      },
 
-      { field            : 'expiration_date',
-        width            : 150,
-        displayName      : 'TABLE.COLUMNS.EXPIRATION_DATE',
-        headerCellFilter : 'translate',
-        cellTemplate     : 'modules/stock/entry/modals/templates/lot.expiration.tmpl.html' },
+      {
+        field: 'expiration_date',
+        type: 'date',
+        width: 150,
+        visible : (vm.stockLine.expires !== 0),
+        displayName: 'TABLE.COLUMNS.EXPIRATION_DATE',
+        headerCellFilter: 'translate',
+        cellTemplate: 'modules/stock/entry/modals/templates/lot.expiration.tmpl.html'
+      },
 
-      { field        : 'actions',
-        width        : 25,
-        cellTemplate : 'modules/stock/entry/modals/templates/lot.actions.tmpl.html' },
+      {
+        field: 'actions',
+        width: 25,
+        cellTemplate: 'modules/stock/entry/modals/templates/lot.actions.tmpl.html'
+      },
     ],
-    onRegisterApi : onRegisterApi,
+    data: vm.stockLine.lots,
+    onRegisterApi: onRegisterApi
   };
 
-  vm.gridOptions.data = vm.inventory.lots;
+  // exposing method to the view
+  vm.submit = submit;
+  vm.cancel = cancel;
+  vm.addLot = addLot;
+  vm.checkLine = checkLine
+  vm.checkAll = checkAll;
+  vm.removeLot = removeLot;
+
+  function sumLot(x, y) {
+    return x + y.quantity;
+  }
+
+  function init() {
+    if (!vm.stockLine.lots.length) {
+      addLot();
+    } else {
+      // if there is at least one lot already, then check only
+      checkAll();
+    }
+  }
+
+  function addLot() {
+    vm.stockLine.lots.push({
+      isValid: false,
+      lot: null,
+      expiration_date: new Date(),
+      quantity: 0,
+    });
+
+    checkAll();
+  }
 
   function onRegisterApi(api) {
     vm.gridApi = api;
   }
-  /* ======================= End Grid ======================================== */
 
-  // bind methods
-  vm.submit = submit;
-  vm.cancel = cancel;
-  vm.addLot = addLot;
-  vm.removeLot = removeLot;
-  vm.handleChange = handleChange;
-  vm.onDateChangeCallback = onDateChangeCallback;
+  function checkAll() {
+    vm.hasNoLot = !vm.stockLine.lots.length > 0;
 
-  // init
-  function init() {
-    vm.inventory = Data.inventory;
-    vm.remainingQuantity = vm.inventory.quantity;
-
-    if (vm.inventory.lots.length) {
-      vm.gridOptions.data = vm.inventory.lots;
-    } else {
-      addLot();
-    }
-  }
-
-  // add lot
-  function addLot() {
-    if (vm.remainingQuantity <= 0) {
-      vm.maxLotReached = true;
-      return;
-    }
-    vm.gridOptions.data.push({
-      is_valid        : false,
-      lot             : '',
-      expiration_date : new Date(),
-      quantity        : vm.remainingQuantity,
+    vm.isSomeLineIncorrect = vm.stockLine.lots.some(function (lot) {
+      return lot.isValid === false;
     });
+
+    vm.sum = vm.stockLine.lots.reduce(sumLot, 0);
+
+    vm.isQuantityIncorrect = vm.sum > vm.stockLine.quantity;
+
+    vm.hasInvalidEntries = vm.isSomeLineIncorrect || vm.isQuantityIncorrect || vm.hasNoLot;
   }
 
-  // remove lot
-  function removeLot(index) {
-    vm.gridOptions.data.splice(index, 1);
-  }
-
-  // handle date change
-  function onDateChangeCallback(date, inventory) {
-    inventory.expiration_date = date;
-    // notify date change
-    handleChange(inventory);
-  }
-
-  // handleChange
-  function handleChange(inventory) {
-    var sum = vm.gridOptions.data.reduce(sumQuantity, 0);
-    var hasQuantity = (vm.inventory.quantity >= sum);
-    var hasLotLabel = inventory.lot;
-    var hasExpiration = (new Date(inventory.expiration_date) > new Date());
-    inventory.is_valid = (hasQuantity && hasLotLabel && hasExpiration);
-
-    vm.remainingQuantity = (vm.inventory.quantity - sum >= 0) ? vm.inventory.quantity - sum : 0;
-    vm.sum = sum;
-
-    if (vm.remainingQuantity) {
-      vm.maxLotReached = false;
+  function checkLine(line, date) {
+       
+    if (date) { line.expiration_date = date; }
+    
+    var isPosterior = new Date(line.expiration_date) >= new Date();
+    // IF this item doesn't expires, we can consider isposterior = true,
+    // no check for the expiration date,
+    // the expiration date can have defaut value, this year + 1000 years.
+      
+    if (vm.stockLine.expires === 0) {
+      isPosterior = true;
+      line.expiration_date = new Date((current.getFullYear() + 1000), current.getMonth());
     }
+    line.isValid = (line.lot && line.quantity > 0 && isPosterior);
+    vm.gridApi.core.notifyDataChange(uiGridConstants.dataChange.EDIT);
+
+    checkAll();
   }
 
-  // check rows validity
-  function validLots() {
-    return vm.gridOptions.data.every(function (item) {
-      return item.is_valid === true;
-    });
-  }
-
-  // submit
-  function submit() {
-    if (!validLots()) { return; }
-
-    Instance.close({ lots: vm.gridOptions.data, quantity: vm.sum });
-  }
-
-  // cancel
   function cancel() {
     Instance.dismiss();
   }
 
-  // sum
-  function sumQuantity(current, previous) {
-    return previous.quantity + current;
+  function removeLot(index) {
+    vm.stockLine.lots.splice(index, 1);
+    checkAll();
+  }
+
+  function submit(detailsForm) {
+    if (!vm.hasInvalidEntries) {
+      Instance.close({ lots: vm.stockLine.lots, quantity: vm.sum });
+    }
   }
 
   init();

@@ -2,24 +2,27 @@ angular.module('bhima.controllers')
   .controller('ComplexJournalVoucherController', ComplexJournalVoucherController);
 
 ComplexJournalVoucherController.$inject = [
-  'VoucherService', '$translate', 'CurrencyService', 'SessionService',
-  'FindEntityService', 'FindReferenceService', 'NotifyService',
-  'VoucherToolkitService', 'ReceiptModal', 'bhConstants', 'GridAggregatorService',
-  'uiGridConstants', 'VoucherForm',
+  'VoucherService', 'CurrencyService', 'SessionService', 'FindEntityService',
+  'FindReferenceService', 'NotifyService', 'VoucherToolkitService',
+  'ReceiptModal', 'bhConstants', 'uiGridConstants', 'VoucherForm', '$timeout',
 ];
 
 /**
- * Complex Journal Vouchers
+ * @overview ComplexJournalVoucherController
  *
+ * @description
  * This module implements complex journal vouchers. It allows users to quickly create transactions by
  * specifying two or more lines of transactions and all relative document references
  *
  * @constructor
  *
- * @todo - Implement caching mechanism for incomplete forms (via AppCache)
- * @todo/@fixme - this error notification system needs serious refactor.
+ * TODO - Implement caching mechanism for incomplete forms (via AppCache)
+ * TODO/FIXME - this error notification system needs serious refactor.
  */
-function ComplexJournalVoucherController(Vouchers, $translate, Currencies, Session, FindEntity, FindReference, Notify, Toolkit, Receipts, bhConstants, GridAggregators, uiGridConstants, VoucherForm) {
+function ComplexJournalVoucherController(
+  Vouchers, Currencies, Session, FindEntity, FindReference, Notify, Toolkit,
+  Receipts, bhConstants, uiGridConstants, VoucherForm, $timeout
+) {
   var vm = this;
 
   // bind constants
@@ -43,22 +46,6 @@ function ComplexJournalVoucherController(Vouchers, $translate, Currencies, Sessi
     vm.gridApi.core.notifyDataChange(uiGridConstants.dataChange.EDIT);
   };
 
-  // bread crumb paths
-  vm.paths = [{
-    label : $translate.instant('TREE.FINANCE'),
-  }, {
-    label   : $translate.instant('VOUCHERS.COMPLEX.TITLE'),
-    current : true,
-  }];
-
-  // breadcrumb dropdown
-  vm.dropdown = [{
-    label  : 'VOUCHERS.GLOBAL.TOOLS',
-    color  : 'btn-default',
-    icon   : 'fa-cogs',
-    option : Toolkit.options,
-  }];
-
   // ui-grid options
   vm.gridOptions = {
     appScopeProvider  : vm,
@@ -74,43 +61,90 @@ function ComplexJournalVoucherController(Vouchers, $translate, Currencies, Sessi
     vm.gridApi = api;
   }
 
-  /** ======================== voucher tools ========================== */
+  vm.openConventionPaymentModal = function openConventionPaymentModal() {
+    Toolkit.openConventionPaymentModal()
+      .then(processVoucherToolRows);
+  };
 
-  // toolkit action definition
-  var conventionPaymentTool = Toolkit.tools.convention_payment;
+  vm.openGenericIncomeModal = function openGenericIncomeModal() {
+    Toolkit.openGenericIncomeModal()
+      .then(processVoucherToolRows);
+  };
 
-  // action on convention payment tool
-  conventionPaymentTool.action = openConventionPaymentTool;
 
-  // open convention payment function
-  function openConventionPaymentTool() {
-    Toolkit.open(conventionPaymentTool)
-      .then(function (result) {
-        if (!result) { return; }
+  vm.openGenericExpenseModal = function openGenericExpenseModal() {
+    Toolkit.openGenericExpenseModal()
+      .then(processVoucherToolRows);
+  };
 
-        var rows = result.rows;
-        var n = result.rows.length;
+  vm.openCashTransferModal = function openCashTransferModal() {
+    Toolkit.openCashTransferModal()
+      .then(processVoucherToolRows);
+  };
 
-        while (n--) {
-          vm.Voucher.addItems(1);
+  vm.openSupportPatientModal = function openSupportPatientModal() {
+    Toolkit.openSupportPatientModal()
+      .then(processVoucherToolRows);
+  };
 
-          var lastRowIdx = vm.Voucher.store.data.length - 1;
-          var lastRow = vm.Voucher.store.data[lastRowIdx];
+  /**
+   * @function processVoucherToolRows
+   *
+   * @description this function handle the result of the tool modal
+   */
+  function processVoucherToolRows(result) {
+    if (!result) { return; }
 
-          lastRow.configure(rows[n]);
-        }
+    vm.Voucher.replaceFormRows(result.rows);
 
-        vm.Voucher.validate();
-        vm.gridApi.core.notifyDataChange(uiGridConstants.dataChange.ROW);
-      });
+    // force updating details
+    updateView(result);
+  }
+
+  /**
+   * @method updateView
+   *
+   * @description
+   * this function force to update details of the voucher
+   * and remove unnecessary rows
+   *
+   * @param {object} result
+   */
+  function updateView(result) {
+    $timeout(function update() {
+      // transaction type
+      vm.Voucher.details.type_id = result.type_id || vm.Voucher.details.type_id;
+
+      // description
+      vm.Voucher.description(result.description || vm.Voucher.details.description);
+
+      // currency
+      vm.Voucher.details.currency_id = result.currency_id || vm.Voucher.details.currency_id;
+
+      removeNullRows();
+    }, 0);
+  }
+
+  /**
+   * @function removeNullRows
+   *
+   * @description remove null rows
+   */
+  function removeNullRows() {
+    var gridData = JSON.parse(JSON.stringify(vm.gridOptions.data));
+    gridData.forEach(function removeItems(item) {
+      if (!item.account_id) {
+        vm.Voucher.store.remove(item.uuid);
+      }
+    });
   }
 
   /** ======================== end voucher tools ======================= */
 
   // bind the startup method as a reset method
   vm.submit = submit;
-  vm.currencySymbol     = currencySymbol;
-  vm.openEntityModal    = openEntityModal;
+  vm.currencySymbol = currencySymbol;
+  vm.openEntityModal = openEntityModal;
   vm.openReferenceModal = openReferenceModal;
 
   // load the available currencies
@@ -134,15 +168,15 @@ function ComplexJournalVoucherController(Vouchers, $translate, Currencies, Sessi
   /** Reference modal */
   function openReferenceModal(row) {
     FindReference.openModal(row.entity)
-      .then(function (document) {
-        row.configure({ document: document });
+      .then(function (doc) {
+        row.configure({ document: doc });
       });
   }
 
   /** Get the selected currency symbol */
-  function currencySymbol(currency_id) {
-    if (!currency_id) { return; }
-    return Currencies.symbol(currency_id);
+  function currencySymbol(currencyId) {
+    if (!currencyId) { return ''; }
+    return Currencies.symbol(currencyId);
   }
 
   /** run the module on startup and refresh */
@@ -154,10 +188,7 @@ function ComplexJournalVoucherController(Vouchers, $translate, Currencies, Sessi
 
   Vouchers.transactionType()
     .then(function (list) {
-      vm.types = list.data.map(function (item) {
-        item.hrText = $translate.instant(item.text);
-        return item;
-      });
+      vm.types = list;
     })
     .catch(Notify.handleError);
 
@@ -217,20 +248,21 @@ function ComplexJournalVoucherController(Vouchers, $translate, Currencies, Sessi
 
   /** submit data */
   function submit(form) {
+    var valid;
+    var voucher;
+
     // stop submission if the form is invalid
     if (form.$invalid) {
-      Notify.danger('VOUCHERS.COMPLEX.INVALID_VALUES');
-      return;
+      return Notify.danger('VOUCHERS.COMPLEX.INVALID_VALUES');
     }
 
-    var valid = vm.Voucher.validate();
+    valid = vm.Voucher.validate();
 
     if (!valid) {
-      Notify.danger(vm.Voucher._error);
-      return;
+      return Notify.danger(vm.Voucher._error);
     }
 
-    var voucher = vm.Voucher.details;
+    voucher = vm.Voucher.details;
     voucher.items = vm.Voucher.store.data;
 
     return Vouchers.create(voucher)

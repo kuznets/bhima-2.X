@@ -5,22 +5,32 @@
  * @todo - this could probably be separated by functionality.
  */
 
-const express    = require('express');
-const compress   = require('compression');
+const express = require('express');
+const compress = require('compression');
 const bodyParser = require('body-parser');
-const session    = require('express-session');
+const session = require('express-session');
 const RedisStore = require('connect-redis')(session);
-const Redis      = require('ioredis');
-const morgan     = require('morgan');
-const fs         = require('fs');
-const winston    = require('winston');
-const _          = require('lodash');
-const helmet     = require('helmet');
-const path       = require('path');
+const Redis = require('ioredis');
+const morgan = require('morgan');
+const winston = require('winston');
+const _ = require('lodash');
+const helmet = require('helmet');
+
+const debug = require('debug')('app');
 
 const interceptors = require('./interceptors');
-const Unauthorized = require('../lib/errors/Unauthorized');
+const { Unauthorized } = require('../lib/errors');
 const uploads = require('../lib/uploader');
+
+const days = 1000 * 60 * 60 * 24;
+const publicRoutes = [
+  '/auth/login',
+  '/languages',
+  '/projects/',
+  '/auth/logout',
+  '/install',
+  '/currencies',
+];
 
 // accept generic express instances (initialised in app.js)
 exports.configure = function configure(app) {
@@ -28,14 +38,14 @@ exports.configure = function configure(app) {
   // const isProduction = (process.env.NODE_ENV === 'production');
   const isProduction = false;
 
-  winston.debug('Configuring middleware.');
+  debug('Configuring middleware.');
 
   // helmet guards
   app.use(helmet());
   app.use(compress());
 
-  app.use(bodyParser.json({ limit: '8mb' }));
-  app.use(bodyParser.urlencoded({ extended: false }));
+  app.use(bodyParser.json({ limit : '8mb' }));
+  app.use(bodyParser.urlencoded({ extended : false }));
 
   // this will disable the session from expiring on the server (redis-session)
   // during development
@@ -49,10 +59,10 @@ exports.configure = function configure(app) {
       client : new Redis(),
     }),
     secret            : process.env.SESS_SECRET,
-    resave            : Boolean(process.env.SESS_RESAVE),
+    resave            : false,
     saveUninitialized : false,
-    unset             : process.env.SESS_UNSET,
-    cookie            : { httpOnly: true },
+    unset             : 'destroy',
+    cookie            : { httpOnly : true },
     retries           : 20,
   };
 
@@ -72,13 +82,14 @@ exports.configure = function configure(app) {
 
   // http logger setup
   // options: combined | common | dev | short | tiny
-  app.use(morgan('combined', { stream: winston.stream }));
+  app.use(morgan('combined', { stream : winston.stream }));
 
   // public static directories include the entire client and the uploads
   // directory.
-  const days = 1000 * 60 * 60 * 24;
-  const params = {};
-  params.maxAge = isProduction ? 7 * days : 0;
+  const params = {
+    maxAge : isProduction ? 7 * days : 0,
+  };
+
   app.use(express.static('client/', params));
   app.use(`/${uploads.directory}`, express.static(uploads.directory));
 
@@ -87,11 +98,10 @@ exports.configure = function configure(app) {
 
   // Only allow routes to use /login, /projects, /logout, and /languages if a
   // user session does not exists
-  const publicRoutes = ['/auth/login', '/languages', '/projects/', '/auth/logout'];
 
   app.use((req, res, next) => {
     if (_.isUndefined(req.session.user) && !within(req.path, publicRoutes)) {
-      winston.debug(`Rejecting unauthorized access to ${req.path} from ${req.ip}`);
+      debug(`Rejecting unauthorized access to ${req.path} from ${req.ip}`);
       next(new Unauthorized('You are not logged into the system.'));
     } else {
       next();

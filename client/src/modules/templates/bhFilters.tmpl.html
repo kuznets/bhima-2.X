@@ -1,31 +1,30 @@
-<div ng-hide="$ctrl.filters" class="text-muted">
+<div ng-hide="$ctrl.filters" class="text-muted" data-bh-filter-bar-no-filters>
   <i class="fa fa-filter"></i> <span translate>FORM.INFO.NO_FILTERS_APPLIED</span>
 </div>
 
-<ul ng-if="$ctrl.filters.defaultFilters" class="list-inline filter-list" data-bh-filter-bar>
-
+<ul ng-if="$ctrl.filters.defaultFilters" class="list-inline filter-list" data-bh-filter-bar-default-filters>
   <li ng-repeat="filter in $ctrl.filters.defaultFilters">
     <!--
       TODO: these should be a custom CSS class.  Label is just too small!
     -->
-    <span class="label label-warning">
+    <span class="label label-emphasize">
       <i class="fa fa-filter"></i>
-      <span translate>{{filter._label}}</span> {{ filter.comparitor ? " " + filter.comparitor : ":" }}
+      <span translate>{{filter._label}}</span> {{ filter._comparitor ? " " + filter._comparitor : ":" }}
       {{ filter.displayValue }}
     </span>
   </li>
 </ul>
 
-<!-- Seperator between filter types -->
-<div ng-if="$ctrl.filters.customFilters.length" style="display : inline-block; width : 1px; height: 25px; vertical-align : top; background-color : #ccc;"></div>
+<!-- Separator between filter types -->
+<div ng-if="$ctrl.filters.defaultFilters.length && $ctrl.filters.customFilters.length" style="display : inline-block; width : 1px; height: 25px; vertical-align : top; background-color : #ccc;"></div>
 
-<ul ng-if="$ctrl.filters.customFilters.length" class="list-inline filter-list" data-bh-filter-bar>
+<ul ng-if="$ctrl.filters.customFilters.length" class="list-inline filter-list" data-bh-filter-bar-custom-filters>
 
   <li ng-repeat="filter in $ctrl.filters.customFilters">
     <span class="label label-primary">
       <i class="fa fa-filter"></i>
       <span translate>{{filter._label}}</span>
-      {{ filter.comparitor ? " " + filter.comparitor : ":" }}
+      {{ filter._comparitor ? " " + filter._comparitor : ":" }}
       {{ filter.displayValue }}
 
       <a ng-if="!filter.isDefault" href ng-click="$ctrl.onRemoveFilter({ filter : filter._key })"
@@ -35,5 +34,4 @@
 
     </span>
   </li>
-
 </ul>

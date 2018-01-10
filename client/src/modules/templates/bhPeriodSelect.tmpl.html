@@ -1,4 +1,4 @@
-<div class="form-group">
+<div class="form-group" data-bh-period-select>
 <label class="form-label" translate>PERIODS.PERIOD_LIMIT</label>
 <p class="form-static">
   <span translate>{{$ctrl.period.translateKey}}</span>
@@ -6,6 +6,10 @@
   <!-- Exception for ALL time - this is the only period that does not need to be defined -->
   <span ng-if="$ctrl.period.key !== $ctrl.NO_PERIOD_LIMIT_KEY && $ctrl.period.key !== $ctrl.CUSTOM_PERIOD_KEY">
   ({{$ctrl.period.start}}) - ({{$ctrl.period.end}})
+  </span>
+
+  <span ng-if="$ctrl.period.customPeriodStart && $ctrl.period.customPeriodEnd">
+    ({{ $ctrl.period.customPeriodStart | date: $ctrl.dateFormat }}) - ({{ $ctrl.period.customPeriodEnd | date: $ctrl.dateFormat }})
   </span>
 </p>
 
@@ -18,42 +22,94 @@
   <div class="row">
     <div class="col-md-6">
       <ul>
-        <li ng-repeat="period in $ctrl.Periods.categories.THIS"><a href ng-click="$ctrl.selectPeriod(period.key)"><span translate>{{period.translateKey}}</span></a></li>
+        <li ng-repeat="period in $ctrl.Periods.categories.THIS">
+          <a href ng-click="$ctrl.selectPeriod(period.key)" data-link="{{period.key}}">
+            <span translate>{{period.translateKey}}</span>
+          </a>
+        </li>
       </ul>
     </div>
     <div class="col-md-6">
       <ul>
-        <li ng-repeat="period in $ctrl.Periods.categories.LAST"><a href ng-click="$ctrl.selectPeriod(period.key)"><span translate>{{period.translateKey}}</span></a></li>
+        <li ng-repeat="period in $ctrl.Periods.categories.LAST">
+          <a href ng-click="$ctrl.selectPeriod(period.key)"  data-link="{{period.key}}">
+            <span translate>{{period.translateKey}}</span>
+          </a>
+        </li>
       </ul>
     </div>
   </div>
   <div class="row">
     <div class="col-md-12">
       <ul>
-        <li ng-repeat="period in $ctrl.Periods.categories.OTHER"><a href ng-click="$ctrl.selectPeriod(period.key)"><span translate>{{period.translateKey}}</span></a></li>
+        <li ng-repeat="period in $ctrl.Periods.categories.OTHER">
+          <a href ng-click="$ctrl.selectPeriod(period.key)"  data-link="{{period.key}}">
+            <span translate>{{period.translateKey}}</span>
+          </a>
+        </li>
       </ul>
 
       <!-- @TODO move these templates/ logic into a component that can be unit tested -->
       <ul>
-        <li><a href ng-click="$ctrl.toggleCustomSelection()"><span translate>PERIODS.CUSTOM</span></a></li>
+        <li>
+          <a href ng-click="$ctrl.toggleCustomSelection()">
+            <span translate>PERIODS.CUSTOM</span>
+          </a>
+        </li>
       </ul>
     </div>
   </div>
   <div ng-show="$ctrl.customExpanded">
-    <div class="row">
-      <div class="col-md-6">
-        <label translate>PERIODS.CUSTOM_FROM</label>
-        <input class="form-control" ng-model="$ctrl.customSelection.from" type="date">
-      </div>
-      <div class="col-md-6">
-        <label translate>PERIODS.CUSTOM_TO</label>
-        <input class="form-control" ng-model="$ctrl.customSelection.to" type="date">
-      </div>
-    </div>
 
-    <div class="row" style="margin-top : 5px">
-      <div class="col-md-12">
-        <button type="button" class="btn btn-default" ng-click="$ctrl.selectCustomPeriod($ctrl.customSelection)"><span translate>PERIODS.SUBMIT_CUSTOM_PERIOD</span></button>
+    <div class="row">
+      <div class="col-md-5">
+        <div class="input-group">
+          <input
+            id="modal-date-from"
+            name="dateFrom"
+            type="text"
+            class="form-control"
+            uib-datepicker-popup="{{ $ctrl.dateFormat }}"
+            datepicker-options="$ctrl.pickerOptions"
+            is-open="$ctrl.dateFromIsOpen"
+            show-button-bar="false"
+            ng-model="$ctrl.customSelection.from"
+            ng-change="$ctrl.customPeriodChanges()"
+            ng-required="$ctrl.required">
+            <span class="input-group-btn">
+              <button class="btn btn-default" type="button" ng-click="$ctrl.dateFromIsOpen =! $ctrl.dateFromIsOpen">
+                <i class="fa fa-calendar-plus-o"></i>
+              </button>
+            </span>
+        </div>
+      </div>
+      <div class="col-md-2">
+
+      </div>
+      <div class="col-md-5">
+        <div class="input-group">
+        <input
+          id="modal-date-to"
+          name="dateTo"
+          type="text"
+          class="form-control"
+          uib-datepicker-popup="{{ $ctrl.dateFormat }}"
+          datepicker-options="$ctrl.pickerOptions"
+          is-open="$ctrl.dateToIsOpen"
+          show-button-bar="false"
+          ng-model="$ctrl.customSelection.to"
+          ng-change="$ctrl.customPeriodChanges()"
+          ng-required="$ctrl.required"
+          >
+          <span class="input-group-btn">
+            <button class="btn btn-default" type="button" ng-click="$ctrl.dateToIsOpen =! $ctrl.dateToIsOpen">
+              <i class="fa fa-calendar-plus-o"></i>
+            </button>
+          </span>
+      </div>
+      <div class="help-block" ng-messages="DateIntervalForm.dateTo.$error" ng-show="$ctrl.validationTrigger && DateIntervalForm.dateTo.$invalid">
+        <div ng-messages-include="modules/templates/messages.tmpl.html"></div>
+      </div>
       </div>
     </div>
   </div>

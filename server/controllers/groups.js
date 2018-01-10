@@ -1,17 +1,17 @@
-const _           = require('lodash');
+const _ = require('lodash');
 
-const db          = require('../lib/db');
-const BadRequest  = require('../lib/errors/BadRequest');
+const db = require('../lib/db');
+const BadRequest = require('../lib/errors/BadRequest');
 
 let subscriptions = {
-  debtor_group_billing_service : {
+  debtor_group_invoicing_fee : {
     entity  : 'debtor_group_uuid',
-    map     : 'billing_service_id'
+    map     : 'invoicing_fee_id',
   },
   debtor_group_subsidy : {
-    entity  : 'debtor_group_uuid',
-    map     : 'subsidy_id '
-  }
+    entity : 'debtor_group_uuid',
+    map : 'subsidy_id ',
+  },
 };
 
 exports.updateSubscriptions = updateSubscriptions;
@@ -36,12 +36,15 @@ function updateSubscriptions(req, res, next) {
     throw new BadRequest(`Cannot find details for ${subscriptionKey} subscription`, 'ERROR.INVALID_REQUEST');
   }
   if (!groupSubscriptions) {
-    throw new BadRequest(`Request must specify a "subscriptions" object containing an array of entity ids`, 'ERROR.ERR_MISSING_INFO');
+    throw new BadRequest(
+      `Request must specify a "subscriptions" object containing an array of entity ids`,
+      `ERROR.ERR_MISSING_INFO`
+    );
   }
 
-  let transaction = db.transaction();
-  let binaryId = db.bid(id);
-  let formattedSubscriptions = parseFormMap(groupSubscriptions, binaryId);
+  const transaction = db.transaction();
+  const binaryId = db.bid(id);
+  const formattedSubscriptions = parseFormMap(groupSubscriptions, binaryId);
 
   // remove all relationships for the entity ID provided
   transaction.addQuery(subscriptionDetails.removeAssignmentsQuery, [binaryId]);
@@ -52,7 +55,7 @@ function updateSubscriptions(req, res, next) {
   }
 
   transaction.execute()
-    .then(function (result) {
+    .then((result) => {
       res.status(200).json(result);
     })
     .catch(next)
@@ -71,7 +74,7 @@ function prepareQueries() {
   // accept a subscription definition object and append two attributes
   // * removeAssignmentsQuery - remove all assignements with this entity
   // * createAssigmentsQuery - insert assignments into table name
-  subscriptions = _.mapValues(subscriptions, function (subscription, key) {
+  subscriptions = _.mapValues(subscriptions, (subscription, key) => {
     subscription.removeAssignmentsQuery =
       `DELETE FROM ${key} WHERE ${subscription.entity} = ?`;
     subscription.createAssignmentsQuery =

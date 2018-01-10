@@ -9,18 +9,30 @@
     <div class="col-xs-12">
 
       <!-- page title  -->
-      <h2 class="text-center text-capitalize">
-        {{translate 'TREE.GENERAL_LEDGER'}}
-      </h2>
+      <h3 class="text-center text-uppercase"><strong>{{translate 'TREE.GENERAL_LEDGER'}}</strong></h3>
+
+      <h4 class="text-center"><strong>{{ fiscal_year_label}}</strong></h4>
 
       <!-- invoices listed  -->
-      <table class="table table-condensed table-bordered table-striped">
+      <table class="table table-condensed table-report table-bordered">
         <thead>
-          <tr>
+          <tr class="text-capitalize text-center" style="background-color: #ddd;">
             <th>{{translate 'TABLE.COLUMNS.ACCOUNT'}}</th>
             <th>{{translate 'TABLE.COLUMNS.LABEL'}}</th>
-            <th>{{translate 'TABLE.COLUMNS.DEBTOR_SOLD'}}</th>
-            <th>{{translate 'TABLE.COLUMNS.CREDITOR_SOLD'}}</th>
+            <th>{{translate 'TABLE.COLUMNS.BALANCE'}}</th>
+            <th>{{translate 'TABLE.COLUMNS.OPENING_BALANCE'}}</th>
+            <th>{{translate 'TABLE.COLUMNS.DATE_MONTH_MIN.JANUARY'}}</th>
+            <th>{{translate 'TABLE.COLUMNS.DATE_MONTH_MIN.FEBRUARY'}}</th>
+            <th>{{translate 'TABLE.COLUMNS.DATE_MONTH_MIN.MARCH'}}</th>
+            <th>{{translate 'TABLE.COLUMNS.DATE_MONTH_MIN.APRIL'}}</th>
+            <th>{{translate 'TABLE.COLUMNS.DATE_MONTH_MIN.MAY'}}</th>
+            <th>{{translate 'TABLE.COLUMNS.DATE_MONTH_MIN.JUNE'}}</th>
+            <th>{{translate 'TABLE.COLUMNS.DATE_MONTH_MIN.JULY'}}</th>
+            <th>{{translate 'TABLE.COLUMNS.DATE_MONTH_MIN.AUGUST'}}</th>
+            <th>{{translate 'TABLE.COLUMNS.DATE_MONTH_MIN.SEPTEMBER'}}</th>
+            <th>{{translate 'TABLE.COLUMNS.DATE_MONTH_MIN.OCTOBER'}}</th>
+            <th>{{translate 'TABLE.COLUMNS.DATE_MONTH_MIN.NOVEMBER'}}</th>
+            <th>{{translate 'TABLE.COLUMNS.DATE_MONTH_MIN.DECEMBER'}}</th>                                                            
           </tr>
         </thead>
         <tbody>
@@ -28,8 +40,72 @@
             <tr>
               <td>{{number}}</td>
               <td>{{label}}</td>
-              <td class="text-right">{{currency debtor_balance ../metadata.enterprise.currency_id}}</td>
-              <td class="text-right">{{currency creditor_balance ../metadata.enterprise.currency_id}}</td>
+              <td class="text-right">{{currency balance ../metadata.enterprise.currency_id}}</td>
+              <td class="text-right">
+                {{#if balance0}}
+                  {{currency balance0 ../metadata.enterprise.currency_id}}
+                {{/if}}
+              </td>                                
+              <td class="text-right">
+                {{#if balance1}}
+                  {{currency balance1 ../metadata.enterprise.currency_id}}
+                {{/if}}
+              </td>          
+              <td class="text-right">
+                {{#if balance2}}
+                  {{currency balance2 ../metadata.enterprise.currency_id}}
+                {{/if}}
+              </td>                                            
+              <td class="text-right">
+                {{#if balance3}}
+                  {{currency balance3 ../metadata.enterprise.currency_id}}
+                {{/if}}  
+              </td>
+              <td class="text-right">
+                {{#if balance4}}
+                  {{currency balance4 ../metadata.enterprise.currency_id}}
+                {{/if}}
+              </td>
+              <td class="text-right">
+                {{#if balance5}}
+                  {{currency balance5 ../metadata.enterprise.currency_id}}
+                {{/if}}
+              </td>
+              <td class="text-right">
+                {{#if balance6}}
+                  {{currency balance6 ../metadata.enterprise.currency_id}}
+                {{/if}}
+              </td>
+              <td class="text-right">
+                {{#if balance7}}
+                  {{currency balance7 ../metadata.enterprise.currency_id}}
+                {{/if}}
+              </td>
+              <td class="text-right">
+                {{#if balance8}}
+                  {{currency balance8 ../metadata.enterprise.currency_id}}
+                {{/if}}
+              </td>
+              <td class="text-right">
+                {{#if balance9}}
+                  {{currency balance9 ../metadata.enterprise.currency_id}}
+                {{/if}}
+              </td>
+              <td class="text-right">
+                {{#if balance10}}
+                  {{currency balance10 ../metadata.enterprise.currency_id}}
+                {{/if}}
+              </td>
+              <td class="text-right">
+                {{#if balance11}}
+                  {{currency balance11 ../metadata.enterprise.currency_id}}
+                {{/if}}
+              </td>
+              <td class="text-right">
+                {{#if balance12}}
+                  {{currency balance12 ../metadata.enterprise.currency_id}}
+                {{/if}}
+              </td>                                                        
             </tr>
           {{else}}
             {{> emptyTable columns=4}}

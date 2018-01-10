@@ -1,4 +1,3 @@
-
 /**
  * @overview
  * Invoice Reports
@@ -11,26 +10,24 @@
  * for inspiration.
  */
 
-const q  = require('q');
-const _  = require('lodash');
+const _ = require('lodash');
 const util = require('../../../../lib/util');
 
-const moment = require('moment');
+const shared = require('../shared');
+const Moment = require('moment');
 
-const db            = require('../../../../lib/db');
+const db = require('../../../../lib/db');
 const ReportManager = require('../../../../lib/ReportManager');
-const Invoices      = require('../../patientInvoice');
-const Patients      = require('../../../medical/patients');
-const Exchange      = require('../../exchange');
+const Invoices = require('../../patientInvoice');
+const Patients = require('../../../medical/patients');
+const Exchange = require('../../exchange');
 
-const pdf = require ('../../../../lib/renderers/pdf');
+const pdf = require('../../../../lib/renderers/pdf');
 
 const POS_RECEIPT_TEMPLATE = './server/controllers/finance/reports/invoices/receipt.pos.handlebars';
 const RECEIPT_TEMPLATE = './server/controllers/finance/reports/invoices/receipt.handlebars';
-const REPORT_TEMPLATE  = './server/controllers/finance/reports/invoices/report.handlebars';
+const REPORT_TEMPLATE = './server/controllers/finance/reports/invoices/report.handlebars';
 const CREDIT_NOTE_TEMPLATE = './server/controllers/finance/reports/invoices/creditNote.handlebars';
-
-const invoiceIdentifier = require('../../../../config/identifiers').INVOICE;
 
 exports.report = report;
 exports.receipt = receipt;
@@ -43,16 +40,23 @@ exports.creditNote = creditNote;
  * @return {object} promise
  */
 function report(req, res, next) {
-
-  let report;
+  let reportInstance;
 
   const query = _.clone(req.query);
-  _.extend(query, { filename : 'INVOICE_REGISTRY.TITLE', csvKey : 'rows'});
+  const filters = shared.formatFilters(query);
+
+  _.extend(query, {
+    filename : 'INVOICE_REGISTRY.TITLE',
+    csvKey : 'rows',
+    footerRight : '[page] / [toPage]',
+    footerFontSize : '8',
+  });
 
   try {
-    report = new ReportManager(REPORT_TEMPLATE, req.session, query);
+    reportInstance = new ReportManager(REPORT_TEMPLATE, req.session, query);
   } catch (e) {
-    return next(e);
+    next(e);
+    return;
   }
 
   // This is an easy way to make sure that all the data is captured from any
@@ -69,12 +73,12 @@ function report(req, res, next) {
     WHERE invoice.uuid IN (?);
   `;
 
-  const data = {};
+  const data = { filters };
 
   Invoices.find(query)
     .then(rows => {
       data.rows = rows;
-      let uuids = rows.map(row => db.bid(row.uuid));
+      const uuids = rows.map(row => db.bid(row.uuid));
 
       // if no uuids, return false as the aggregates
       if (!uuids.length) { return false; }
@@ -84,7 +88,7 @@ function report(req, res, next) {
     .then(aggregates => {
       data.aggregates = aggregates;
       data.hasMultipleProjects = aggregates.numProjects > 1;
-      return report.render(data);
+      return reportInstance.render(data);
     })
     .then(result => {
       res.set(result.headers).send(result.report);
@@ -97,16 +101,16 @@ function report(req, res, next) {
 function receipt(req, res, next) {
   const options = req.query;
 
-  let metadata = {
-    enterprise: req.session.enterprise,
-    project: req.session.project,
-    user: req.session.user
+  const metadata = {
+    enterprise : req.session.enterprise,
+    project : req.session.project,
+    user : req.session.user,
   };
 
-  let invoiceUuid = req.params.uuid;
-  let enterpriseId = req.session.enterprise.id;
-  let currencyId = options.currency || req.session.enterprise.currency_id;
-  let invoiceResponse = {};
+  const invoiceUuid = req.params.uuid;
+  const enterpriseId = req.session.enterprise.id;
+  const currencyId = options.currency || req.session.enterprise.currency_id;
+  const invoiceResponse = {};
   invoiceResponse.lang = options.lang;
 
 
@@ -117,28 +121,31 @@ function receipt(req, res, next) {
     _.extend(options, pdf.posReceiptOptions);
   }
 
-  let report;
+  let receiptReport;
 
   try {
-    report = new ReportManager(template, req.session, options);
+    receiptReport = new ReportManager(template, req.session, options);
   } catch (e) {
-    return next(e);
+    next(e);
+    return;
   }
 
   Invoices.lookupInvoice(invoiceUuid)
     .then(reportResult => {
-      let recipientUuid = reportResult.patient_uuid;
+      const recipientUuid = reportResult.patient_uuid;
       _.extend(invoiceResponse, reportResult);
 
-      let queries = {
+      const queries = {
         recipient : Patients.lookupPatient(recipientUuid),
-        creditNote : Invoices.lookupInvoiceCreditNote(invoiceUuid)
+        creditNote : Invoices.lookupInvoiceCreditNote(invoiceUuid),
       };
 
       return util.resolveObject(queries);
     })
     .then(headerResult => {
       _.extend(invoiceResponse, headerResult, metadata);
+
+      invoiceResponse.recipient.hasConventionCoverage = invoiceResponse.recipient.is_convention;
 
       if (invoiceResponse.creditNote) {
         invoiceResponse.isCreditNoted = true;
@@ -148,15 +155,14 @@ function receipt(req, res, next) {
       return Exchange.getExchangeRate(enterpriseId, currencyId, new Date());
     })
     .then(exchangeResult => {
-
       invoiceResponse.receiptCurrency = currencyId;
       invoiceResponse.exchange = exchangeResult.rate;
-      invoiceResponse.dateFormat = (new moment()).format('L');
+      invoiceResponse.dateFormat = (new Moment()).format('L');
       if (invoiceResponse.exchange) {
         invoiceResponse.exchangedTotal = _.round(invoiceResponse.cost * invoiceResponse.exchange);
       }
 
-      return report.render(invoiceResponse);
+      return receiptReport.render(invoiceResponse);
     })
     .then(result => {
       res.set(result.headers).send(result.report);
@@ -169,36 +175,37 @@ function receipt(req, res, next) {
 function creditNote(req, res, next) {
   const options = req.query;
 
-  let metadata = {
-    enterprise: req.session.enterprise,
-    project: req.session.project,
-    user: req.session.user
+  const metadata = {
+    enterprise : req.session.enterprise,
+    project : req.session.project,
+    user : req.session.user,
   };
 
-  let invoiceUuid = req.params.uuid;
-  let enterpriseId = req.session.enterprise.id;
-  let currencyId = options.currency || req.session.enterprise.currency_id;
-  let invoiceResponse = {};
+  const invoiceUuid = req.params.uuid;
+  const enterpriseId = req.session.enterprise.id;
+  const currencyId = options.currency || req.session.enterprise.currency_id;
+  const invoiceResponse = {};
   invoiceResponse.lang = options.lang;
 
-  let template = CREDIT_NOTE_TEMPLATE;
+  const template = CREDIT_NOTE_TEMPLATE;
 
-  let report;
+  let creditNoteReport;
 
   try {
-    report = new ReportManager(template, req.session, options);
+    creditNoteReport = new ReportManager(template, req.session, options);
   } catch (e) {
-    return next(e);
+    next(e);
+    return;
   }
 
   Invoices.lookupInvoice(invoiceUuid)
     .then(reportResult => {
-      let recipientUuid = reportResult.patient_uuid;
+      const recipientUuid = reportResult.patient_uuid;
       _.extend(invoiceResponse, reportResult);
 
-      let queries = {
+      const queries = {
         recipient : Patients.lookupPatient(recipientUuid),
-        creditNote : Invoices.lookupInvoiceCreditNote(invoiceUuid)
+        creditNote : Invoices.lookupInvoiceCreditNote(invoiceUuid),
       };
 
       return util.resolveObject(queries);
@@ -208,20 +215,19 @@ function creditNote(req, res, next) {
       return Exchange.getExchangeRate(enterpriseId, currencyId, new Date());
     })
     .then(exchangeResult => {
-
       invoiceResponse.receiptCurrency = currencyId;
       invoiceResponse.lang = options.lang;
       invoiceResponse.exchange = exchangeResult.rate;
-      invoiceResponse.dateFormat = (new moment()).format('L');
+      invoiceResponse.dateFormat = (new Moment()).format('L');
       if (invoiceResponse.exchange) {
         invoiceResponse.exchangedTotal = _.round(invoiceResponse.cost * invoiceResponse.exchange);
       }
 
       // return Invoices.lookupInvoiceCreditNote(invoiceUuid);
     })
-    .then(creditNoteResult => {
+    .then(() => {
       // invoiceResponse.creditNote = creditNoteResult[0];
-      return report.render(invoiceResponse);
+      return creditNoteReport.render(invoiceResponse);
     })
     .then(result => {
       res.set(result.headers).send(result.report);

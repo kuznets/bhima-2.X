@@ -13,9 +13,9 @@ function uiGridEditAccount(uiGridEditConstants, Accounts, uiGridConstants, $time
         '    style="width:100%" ' +
         '    ng-model="accountInputValue" ' +
         '    uib-typeahead="account.id as account.hrlabel for account in accounts | filter:{\'hrlabel\':$viewValue} | limitTo:8" ' +
-        '    typeahead-min-length="0" ' +
-        '    ng-required="true"' +
+        '    typeahead-min-length="1" ' +
         '    typeahead-editable ="false" ' +
+        '    typeahead-append-to-body="true" ' +
         '    typeahead-on-select="setAccountOnRow(row.entity, $item)" />' +
         '</div>';
 
@@ -65,6 +65,7 @@ function uiGridEditAccount(uiGridEditConstants, Accounts, uiGridConstants, $time
             row.account_id = account.id;
             row.account_name = account.label;
             row.account_number = account.number;
+            row.account_label = account.label;
           };
 
           $scope.$on(uiGridEditConstants.events.BEGIN_CELL_EDIT, function () {

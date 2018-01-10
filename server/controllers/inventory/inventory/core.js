@@ -5,10 +5,10 @@
 * handling.
 */
 
-const uuid = require('node-uuid');
+const uuid = require('uuid/v4');
 const db = require('../../../lib/db');
 const FilterParser = require('../../../lib/filter');
-
+const _ = require('lodash');
 // this should be a const in future ES versions
 const errors = {
   MISSING_PARAMETERS : {
@@ -41,11 +41,10 @@ exports.getItemsMetadata = getItemsMetadata;
 exports.getItemsMetadataById = getItemsMetadataById;
 exports.createItemsMetadata = createItemsMetadata;
 exports.updateItemsMetadata = updateItemsMetadata;
-exports.getItemsMetadataSearch = getItemsMetadataSearch;
 exports.hasBoth = hasBoth;
 exports.errors = errors;
 exports.errorHandler = errorHandler;
-
+exports.remove = remove;
 /**
 * Create inventory metadata in the database
 *
@@ -54,7 +53,8 @@ exports.errorHandler = errorHandler;
 */
 function createItemsMetadata(record, session) {
   record.enterprise_id = session.enterprise.id;
-  record.uuid = db.bid(record.uuid || uuid.v4());
+  const recordUuid = record.uuid || uuid();
+  record.uuid = db.bid(recordUuid);
   record.group_uuid = db.bid(record.group_uuid);
 
   const sql = 'INSERT INTO inventory SET ?;';
@@ -63,7 +63,7 @@ function createItemsMetadata(record, session) {
    * in the main controller (inventory.js)
    */
   return db.exec(sql, [record])
-  .then(() => uuid.unparse(record.uuid));
+    .then(() => recordUuid);
 }
 
 /**
@@ -80,7 +80,14 @@ function updateItemsMetadata(record, identifier) {
     record.group_uuid = db.bid(record.group_uuid);
   }
 
+
   const sql = 'UPDATE inventory SET ? WHERE uuid = ?;';
+  // if there is no property to update this query won't work
+
+  if (_.isEmpty(record)) { // there is no change, but user has submitted
+    return getItemsMetadataById(identifier);
+  }
+
   /*
    * return a promise which can contains result or error which is caught
    * in the main controller (inventory.js)
@@ -110,19 +117,47 @@ function getIds() {
 * @function getItemsMetadata
 * @return {Promise} Returns a database query promise
 */
-function getItemsMetadata() {
-  const sql =
-    `SELECT BUID(i.uuid) as uuid, i.code, i.text AS label, i.price, iu.text AS unit,
-      it.text AS type, ig.name AS groupName, BUID(ig.uuid) AS group_uuid, i.consumable, i.stock_min,
-      i.stock_max, i.created_at AS timestamp, i.type_id, i.unit_id, i.unit_weight, i.unit_volume,
-      ig.sales_account, i.default_quantity, i.avg_consumption, i.delay, i.purchase_interval
-    FROM inventory AS i JOIN inventory_type AS it
-      JOIN inventory_unit AS iu JOIN inventory_group AS ig ON
-      i.type_id = it.id AND i.group_uuid = ig.uuid AND
-      i.unit_id = iu.id
-    ORDER BY i.code;`;
+function getItemsMetadata(params) {
+  db.convert(params, ['inventory_uuids', 'uuid', 'group_uuid']);
+  const filters = new FilterParser(params, { tableAlias : 'inventory', autoParseStatements : false });
 
-  return db.exec(sql);
+  const sql =
+    `SELECT BUID(inventory.uuid) as uuid, inventory.code, inventory.text AS label, inventory.price, iu.abbr AS unit,
+      it.text AS type, ig.name AS groupName, BUID(ig.uuid) AS group_uuid, ig.expires, ig.unique_item, inventory.consumable,inventory.locked, inventory.stock_min,
+      inventory.stock_max, inventory.created_at AS timestamp, inventory.type_id, inventory.unit_id,
+      inventory.unit_weight, inventory.unit_volume, ig.sales_account, ig.stock_account, ig.donation_account,
+      ig.cogs_account, inventory.default_quantity
+    FROM inventory JOIN inventory_type AS it
+      JOIN inventory_unit AS iu JOIN inventory_group AS ig ON
+      inventory.type_id = it.id AND inventory.group_uuid = ig.uuid AND
+      inventory.unit_id = iu.id`;
+
+  filters.fullText('text', 'text', 'inventory');
+
+  filters.equals('uuid');
+  filters.equals('group_uuid');
+  filters.equals('unit_id');
+  filters.equals('type_id');
+  filters.equals('code');
+  filters.equals('price');
+  filters.equals('consumable');
+  filters.equals('locked');
+  filters.equals('label');
+
+  filters.custom('inventory_uuids', 'inventory.uuid IN (?)', params.inventory_uuids);
+  filters.setOrder('ORDER BY inventory.code ASC');
+
+  const query = filters.applyQuery(sql);
+  const parameters = filters.parameters();
+  return db.exec(query, parameters);
+}
+
+
+// This function helps to delete an invetory
+
+function remove(uuid) {
+  const sql = `DELETE FROM inventory WHERE uuid = HUID(?)`;
+  return db.exec(sql, uuid);
 }
 
 /**
@@ -135,8 +170,8 @@ function getItemsMetadata() {
 */
 function getItemsMetadataById(uid) {
   const sql =
-    `SELECT BUID(i.uuid) as uuid, i.code, i.text AS label, i.price, iu.text AS unit,
-      it.text AS type, ig.name AS groupName, BUID(ig.uuid) AS group_uuid, i.consumable, i.stock_min,
+    `SELECT BUID(i.uuid) as uuid, i.code, i.text AS label, i.price, iu.abbr AS unit,
+      it.text AS type, ig.name AS groupName, BUID(ig.uuid) AS group_uuid, ig.expires, ig.unique_item, i.consumable, i.locked, i.stock_min,
       i.stock_max, i.created_at AS timestamp, i.type_id, i.unit_id, i.unit_weight, i.unit_volume,
       ig.sales_account, i.default_quantity, i.avg_consumption, i.delay, i.purchase_interval
     FROM inventory AS i JOIN inventory_type AS it
@@ -148,26 +183,6 @@ function getItemsMetadataById(uid) {
   return db.one(sql, [db.bid(uid), uid, 'inventory']);
 }
 
-
-function getItemsMetadataSearch(params) {
-  const filters = new FilterParser(params, { tableAlias: 'inventory' });
-
-  const sql =
-    `SELECT BUID(inventory.uuid) as uuid, inventory.code, inventory.text AS label, inventory.price, iu.text AS unit,
-      it.text AS type, ig.name AS groupName, BUID(ig.uuid) AS group_uuid, inventory.consumable, inventory.stock_min,
-      inventory.stock_max, inventory.created_at AS timestamp, inventory.type_id, inventory.unit_id,
-      inventory.unit_weight, inventory.unit_volume, ig.sales_account, inventory.default_quantity
-    FROM inventory JOIN inventory_type AS it
-      JOIN inventory_unit AS iu JOIN inventory_group AS ig ON
-      inventory.type_id = it.id AND inventory.group_uuid = ig.uuid AND
-      inventory.unit_id = iu.id`;
-
-  filters.fullText('text', 'text', 'inventory');
-  filters.setOrder('ORDER BY inventory.code ASC');
-  const query = filters.applyQuery(sql);
-  const parameters = filters.parameters();
-  return db.exec(query, parameters);
-}
 
 /**
 * Coerces values in to truth-y and false-y values.  Returns true if

@@ -1,4 +1,3 @@
-
 /**
  * Patient Invoice - Create State
  * @module controllers/finance/patientInvoice
@@ -13,7 +12,7 @@
  * into a prepared statement
  */
 const db = require('../../../lib/db');
-const uuid = require('node-uuid');
+const uuid = require('uuid/v4');
 const util = require('../../../lib/util');
 const _ = require('lodash');
 
@@ -27,7 +26,7 @@ module.exports = createInvoice;
  *
  * Up to three additional tables may be affected:
  *  1. `invoice_items`
- *  2. `invoice_billing_service`
+ *  2. `invoice_invoicing_fee`
  *  3. `invoice_subsidy`
  *
  * The invoicing procedure of a patient's total invoice goes like this:
@@ -35,12 +34,12 @@ module.exports = createInvoice;
  *  client.  The Patient Invoice module is allowed to edit the item costs as it
  *  sees fit, so we use the POSTed costs.
  *  2. Next, each billing service is added to the invoice by writing records to
- *  the `invoice_billing_service` table.  The cost of each billing service is
+ *  the `invoice_invoicing_fee` table.  The cost of each billing service is
  *  determined by multiplying the billing service's value (as a percentage) to
  *  the total invoice cost.
  *  3. Finally, the subsidy for the bill is determined.  NOTE - as of #343, we
  *  are only allowing a single subsidy per invoice.  The array of subsidies is
- *  treated identically to the billing_services, except that it subtracts from
+ *  treated identically to the invoicing_fees, except that it subtracts from
  *  the total bill amount.
  *
  * @todo - change the API to pass in only an array of billingService and subsidy
@@ -48,11 +47,11 @@ module.exports = createInvoice;
  */
 function createInvoice(invoiceDetails) {
   const transaction = db.transaction();
-  const invoiceUuid = db.bid(invoiceDetails.uuid || uuid.v4());
+  const invoiceUuid = db.bid(invoiceDetails.uuid || uuid());
 
-  let billingServices = processBillingServices(invoiceUuid, invoiceDetails.billingServices);
-  let subsidies = processSubsidies(invoiceUuid, invoiceDetails.subsidies);
-  let items = processInvoiceItems(invoiceUuid, invoiceDetails.items);
+  const billingServices = processBillingServices(invoiceUuid, invoiceDetails.billingServices);
+  const subsidies = processSubsidies(invoiceUuid, invoiceDetails.subsidies);
+  const items = processInvoiceItems(invoiceUuid, invoiceDetails.items);
 
   const invoice = processInvoice(invoiceUuid, invoiceDetails);
 
@@ -92,7 +91,7 @@ function processInvoice(invoiceUuid, invoice) {
 
   const keys = [
     'date', 'cost', 'description', 'service_id',
-    'debtor_uuid', 'project_id', 'user_id', 'uuid'
+    'debtor_uuid', 'project_id', 'user_id', 'uuid',
   ];
 
   return keys.map(key => invoice[key]);
@@ -113,7 +112,7 @@ function processInvoice(invoiceUuid, invoice) {
  * @private
  */
 function processBillingServices(invoiceUuid, billingServiceDetails) {
-  let billingServices = billingServiceDetails || [];
+  const billingServices = billingServiceDetails || [];
   return billingServices.map(billingServiceId => [billingServiceId, invoiceUuid]);
 }
 
@@ -131,17 +130,17 @@ function processBillingServices(invoiceUuid, billingServiceDetails) {
  * @private
  */
 function processSubsidies(invoiceUuid, subsidiesDetails) {
-  let subsidies = subsidiesDetails || [];
+  const subsidies = subsidiesDetails || [];
   return subsidies.map(subsidyId => [subsidyId, invoiceUuid]);
 }
 
 // process invoice items, transforming UUIDs into binary.
 function processInvoiceItems(invoiceUuid, invoiceItems) {
-  let items = invoiceItems || [];
+  const items = invoiceItems || [];
 
   // make sure that invoice items have their uuids
-  items.forEach(function (item) {
-    item.uuid = db.bid(item.uuid || uuid.v4());
+  items.forEach((item) => {
+    item.uuid = db.bid(item.uuid || uuid());
     item.invoice_uuid = invoiceUuid;
 
     // should every item have an inventory uuid?
@@ -152,7 +151,7 @@ function processInvoiceItems(invoiceUuid, invoiceItems) {
   });
 
   // create a filter to align invoice item columns to the SQL columns
-  let filter =
+  const filter =
     util.take('uuid', 'inventory_uuid', 'quantity', 'transaction_price', 'inventory_price', 'debit', 'credit', 'invoice_uuid');
 
   // prepare invoice items for insertion into database

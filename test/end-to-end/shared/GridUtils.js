@@ -2,7 +2,7 @@
 const chai = require('chai');
 const helpers = require('./helpers');
 
-const expect = chai.expect;
+const { expect } = chai;
 helpers.configure(chai);
 
 function getGrid(gridId) {
@@ -46,10 +46,34 @@ function expectRowCountAbove(gridId, number) {
   expect(rows.count()).to.eventually.be.above(number);
 }
 
-// assert that the journal's column count is the number passed in
+// assert that the grids's column count is the number passed in
 function expectColumnCount(gridId, number) {
   const columns = getColumns(gridId);
   expect(columns.count()).to.eventually.equal(number);
+}
+
+// Provide a text in a cell and this will give the grid indexes for where to find that text
+function getGridIndexesMatchingText(gridId, text) {
+  let rowIdx;
+  let colIdx;
+
+  console.warn('Warning: You called GU.getGridIndexesMatchingText() which is extremely inefficient.');
+
+  // loop through every single cell and check that the grid's value contains this provided value
+  return this.getGrid(gridId)
+    .element(by.css('.ui-grid-render-container-body'))
+    .all(by.repeater('(rowRenderIndex, row) in rowContainer.renderedRows track by $index'))
+    .each((row, rowIndex) =>
+      row.all(by.repeater('(colRenderIndex, col) in colContainer.renderedColumns track by col.uid'))
+        .each((column, columnIndex) =>
+          column.getText()
+            .then(elementText => {
+              if (elementText.includes(text)) {
+                rowIdx = rowIndex;
+                colIdx = columnIndex;
+              }
+            })))
+    .then(() => ({ rowIndex : rowIdx, columnIndex : colIdx }));
 }
 
 /**
@@ -82,8 +106,8 @@ function expectHeaderColumns(gridId, expectedColumns) {
     headerColumns.count()
   ).to.eventually.equal(expectedColumns.length);
 
-  headerColumns.getText().then(columnTexts => {
-    columnTexts = columnTexts.map(function trimText(text) {
+  headerColumns.getText().then(colTexts => {
+    const columnTexts = colTexts.map(function trimText(text) {
       return text.replace(/^\s+/, '').replace(/\s+$/, '');
     });
 
@@ -111,14 +135,38 @@ function selectRow(gridId, rowNum) {
     .perform();
 }
 
+/**
+  * @name expectCellValueMatch
+  * @description Checks that a cell matches the specified value,
+  * takes a regEx or a simple string.
+  * @param {string} gridId the id of the grid that you want to inspect
+  * @param {integer} row the number of the row (within the visible rows)
+  * that you want to check the value of
+  * @param {integer} col the number of the column (within the visible columns)
+  * that you want to check the value of
+  * @param {string} value a regex or string of the value you expect in that cell
+  *
+  * @example
+  * <pre>
+  *   gridTestUtils.expectCellValueMatch('myGrid', 0, 2, 'CellValue');
+  * </pre>
+  *
+  */
+function expectCellValueMatch(gridId, row, col, value) {
+  var dataCell = getCell(gridId, row, col);
+  expect(dataCell.getText()).to.eventually.equal(value);
+}
+
 exports.getGrid = getGrid;
 exports.getRows = getRows;
 exports.getRow = getRow;
 exports.getColumns = getColumns;
 exports.getCell = getCell;
+exports.getGridIndexesMatchingText = getGridIndexesMatchingText;
 exports.getCellName = getCellName;
 exports.expectRowCount = expectRowCount;
 exports.expectRowCountAbove = expectRowCountAbove;
 exports.expectColumnCount = expectColumnCount;
 exports.expectHeaderColumns = expectHeaderColumns;
 exports.selectRow = selectRow;
+exports.expectCellValueMatch = expectCellValueMatch;

@@ -2,85 +2,98 @@ angular.module('bhima.controllers')
   .controller('InvoiceRegistrySearchModalController', InvoiceRegistrySearchModalController);
 
 InvoiceRegistrySearchModalController.$inject = [
-  '$uibModalInstance', 'UserService', 'ServiceService', 'DateService', 'filters',
-  'NotifyService'
+  '$uibModalInstance', 'filters', 'NotifyService', 'Store', 'PeriodService', 'util', 'PatientInvoiceService',
 ];
 
 /**
  * @class InvoiceRegistrySearchModalController
  *
  * @description
- * This controller is responsible to collecting data from the search form and
- * returning it as a JSON object to the parent controller.  The data can be
- * preset by passing in a filters object using filtersProvider().
+ * This controller is responsible to collecting data from the search form and modifying
+ * the underlying filters before passing them back to the parent controller.
  */
-function InvoiceRegistrySearchModalController(ModalInstance, Users, Services, Dates, filters, Notify) {
+function InvoiceRegistrySearchModalController(ModalInstance, filters, Notify, Store, Periods, util, Invoices) {
   var vm = this;
+  var changes = new Store({ identifier : 'key' });
+  vm.filters = filters;
 
-  // set controller data
-  vm.params = angular.copy(filters || {});
-  vm.periods = Dates.period();
-  vm.today = new Date();
+  vm.defaultQueries = {};
 
-  // @FIXME patch hack - this should be handled by FilterService
-  delete(vm.params.defaultPeriod);
+  // displayValues will be an id:displayValue pair
+  var displayValues = {};
+  var lastDisplayValues = Invoices.filters.getDisplayValueMap();
 
-  // set controller methods
-  vm.submit = submit;
-  vm.clear = clear;
-  vm.cancel = function () { ModalInstance.close(); };
-
-  fetchDependencies();
-
-  function fetchDependencies() {
-
-    Services.read()
-      .then(function (services) {
-        vm.services = services;
-      })
-      .catch(Notify.handleError);
-
-    Users.read()
-      .then(function (users) {
-        vm.users = users;
-      })
-      .catch(Notify.handleError);
+  // assign default limit filter
+  if (filters.limit) {
+    vm.defaultQueries.limit = filters.limit;
   }
 
-  // submit the filter object to the parent controller.
-  function submit(form) {
-    if (form.$invalid) { return; }
+  // @TODO ideally these should be passed in when the modal is initialised
+  //       these are known when the filter service is defined
+  var searchQueryOptions = [
+    'is_caution', 'reference', 'cashbox_id', 'user_id', 'reference_patient', 'currency_id', 'reversed', 'service_id', 'debtor_group_uuid',
+  ];
 
-    //to get it deleted at the for loop below
-    var parameters = angular.copy(vm.params);
+  // assign already defined custom filters to searchQueries object
+  vm.searchQueries = util.maskObjectFromKeys(filters, searchQueryOptions);
 
-    // convert dates to strings
-    if (parameters.billingDateFrom) {
-      parameters.billingDateFrom = Dates.util.str(parameters.billingDateFrom);
+  // set controller data
+  vm.cancel = ModalInstance.close;
+
+  // Set up page elements data (debtor select data)
+  vm.onSelectDebtor = function onSelectDebtor(debtorGroup) {
+    displayValues.debtor_group_uuid = debtorGroup.name;
+    vm.searchQueries.debtor_group_uuid = debtorGroup.uuid;
+  };
+
+  // custom filter user_id - assign the value to the searchQueries object
+  vm.onSelectUser = function onSelectUser(user) {
+    displayValues.user_id = user.display_name;
+    vm.searchQueries.user_id = user.id;
+  };
+
+  // custom filter service_id - assign the value to the searchQueries object
+  vm.onSelectService = function onSelectService(service) {
+    displayValues.service_id = service.name;
+    vm.searchQueries.service_id = service.id;
+  };
+
+  // default filter limit - directly write to changes list
+  vm.onSelectLimit = function onSelectLimit(value) {
+    // input is type value, this will only be defined for a valid number
+    if (angular.isDefined(value)) {
+      changes.post({ key : 'limit', value : value });
     }
+  };
 
-    if (parameters.billingDateTo) {
-      parameters.billingDateTo = Dates.util.str(parameters.billingDateTo);
-    }
+  // default filter period - directly write to changes list
+  vm.onSelectPeriod = function onSelectPeriod(period) {
+    var periodFilters = Periods.processFilterChanges(period);
 
-    // make sure we don't have any undefined or empty parameters
-    angular.forEach(parameters, function (value, key) {
-      if (value === null || value === '') {
-        delete parameters[key];
+    periodFilters.forEach(function (filterChange) {
+      changes.post(filterChange);
+    });
+  };
+
+  // deletes a filter from the custom filter object, this key will no longer be written to changes on exit
+  vm.clear = function clear(key) {
+    delete vm.searchQueries[key];
+  };
+
+  // returns the filters to the journal to be used to refresh the page
+  vm.submit = function submit() {
+    // push all searchQuery values into the changes array to be applied
+    angular.forEach(vm.searchQueries, function (value, key) {
+      if (angular.isDefined(value)) {
+        // default to the original value if no display value is defined
+        var displayValue = displayValues[key] || lastDisplayValues[key] || value;
+        changes.post({ key: key, value: value, displayValue: displayValue });
       }
     });
 
-    return ModalInstance.close(parameters);
-  }
+    var loggedChanges = changes.getAll();
 
-  // clears search parameters.  Custom logic if a date is used so that we can
-  // clear two properties.
-  function clear(value) {
-    if (value === 'date') {
-      delete vm.params.billingDateFrom;
-      delete vm.params.billingDateTo;
-    } else {
-      delete vm.params[value];
-    }
-  }
+    // return values to the Invoice Registry Controller
+    return ModalInstance.close(loggedChanges);
+  };
 }

@@ -7,7 +7,7 @@ angular.module('bhima.components')
       onRegisterApi:     '&',  // expose force refresh API
       required:          '<',  // bind the required (for ng-required)
       validationTrigger: '<',  // bind validation trigger
-      suppressReset:     '@'   // bind a string
+      suppressReset:     '<'   // bind the reset
     }
   });
 
@@ -122,12 +122,13 @@ function FindPatientComponent(Patients, AppCache, Notify, SessionService, bhCons
 
     options = {
       reference : isValidNumber ? [bhConstants.identifiers.PATIENT.key, SessionService.project.abbr, reference].join('.') : reference,
+      detailed : 1,
       limit     : 1
     };
 
     // query the patient's search endpoint for the
     // reference
-    Patients.search(options)
+    Patients.read(null, options)
       .then(function (patients) {
         selectPatient(patients[0]);
       })

@@ -1,9 +1,9 @@
 angular.module('bhima.services')
   .service('VoucherToolkitService', VoucherToolkitService);
 
-VoucherToolkitService.$inject = ['$http', '$uibModal', 'util'];
+VoucherToolkitService.$inject = ['$uibModal'];
 
-function VoucherToolkitService($http, Modal, util) {
+function VoucherToolkitService(Modal) {
   var service = this;
 
   // expose the service
@@ -12,18 +12,65 @@ function VoucherToolkitService($http, Modal, util) {
   // tools of advanced journal voucher
   service.tools = {
     // this tool help to import transaction rows for a convention payment
-    'convention_payment' : {
-      label : 'VOUCHERS.GLOBAL.CONVENTION_INVOICES',
-      controller : 'ConventionPaymentKitController',
-      templateUrl : 'modules/vouchers/toolkit/convention_payment.modal.html'
-    }
+    convention_payment : {
+      controller  : 'ConventionPaymentKitController',
+      templateUrl : 'modules/vouchers/toolkit/convention_payment/convention_payment.modal.html',
+    },
+    generic_income : {
+      controller  : 'GenericIncomeKitController',
+      templateUrl : 'modules/vouchers/toolkit/generic_income/generic_income.html',
+    },
+    generic_expense : {
+      controller  : 'GenericExpenseKitController',
+      templateUrl : 'modules/vouchers/toolkit/generic_expense/generic_expense.html',
+    },
+    cash_transfer : {
+      controller  : 'CashTransferKitController',
+      templateUrl : 'modules/vouchers/toolkit/cash_transfer/cash_transfer.html',
+    },
+    support_patient : {
+      controller  : 'SupportPatientKitController',
+      templateUrl : 'modules/vouchers/toolkit/support_patient/support_patient.modal.html',
+    },
   };
 
-  // service options
-  service.options = Object.keys(service.tools).map(function (item) {
-    var tool = service.tools[item];
-    return tool;
-  });
+  service.openConventionPaymentModal = function openConventionPaymentModal() {
+    return open(service.tools.convention_payment);
+  };
+
+  service.openGenericIncomeModal = function openGenericIncomeModal() {
+    return open(service.tools.generic_income);
+  };
+
+  service.openGenericExpenseModal = function openGenericExpenseModal() {
+    return open(service.tools.generic_expense);
+  };
+
+  service.openCashTransferModal = function openCashTransferModal() {
+    return open(service.tools.cash_transfer);
+  };
+
+  service.openSupportPatientModal = function openSupportPatientModal() {
+    return open(service.tools.support_patient);
+  };
+
+  /**
+   * @method getBlankVoucherRow
+   *
+   * @description
+   * Generates a new, unfilled voucher row.  This is used in almost every voucher tool.
+   *
+   * @returns {object} - the voucher row object
+   */
+  service.getBlankVoucherRow = function getBlankVoucherRow() {
+    return {
+      account_id     : undefined,
+      debit          : 0,
+      credit         : 0,
+      reference_uuid : undefined,
+      entity_uuid    : undefined,
+    };
+  };
 
   /**
    * @function open
@@ -41,10 +88,10 @@ function VoucherToolkitService($http, Modal, util) {
       controller   : option.controller,
       controllerAs : 'ToolCtrl',
       size         : 'md',
-      resolve      : { data : function () { return option; } }
+      backdrop     : 'static',
+      resolve      : { data: function () { return option; } },
     });
 
     return instance.result;
   }
-
 }

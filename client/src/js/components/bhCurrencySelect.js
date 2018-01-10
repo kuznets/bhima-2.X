@@ -2,11 +2,13 @@ angular.module('bhima.components')
   .component('bhCurrencySelect', {
     controller  : bhCurrencySelect,
     templateUrl : 'modules/templates/bhCurrencySelect.tmpl.html',
+    transclude  : true,
     bindings    : {
       currencyId        : '=',
       validationTrigger : '<',
+      onChange          : '&',
+      label             : '@?',
       disableIds        : '<?',
-      onChange          : '&?',
       cashboxId         : '<?',
     },
   });
@@ -55,8 +57,7 @@ bhCurrencySelect.$inject = ['CurrencyService'];
  *   currency-id="ParentCtrl.model.currencyId"
  *   on-change="ParentCtrl.currencyChangeEvent()"
  *   disable-ids="ParentCtrl.disabledIds"
- *   validation-trigger="ParentForm.$submitted"
- *   >
+ *   validation-trigger="ParentForm.$submitted">
  * </bh-currency-select>
  *
  * @requires services/CurrencyService
@@ -79,6 +80,8 @@ function bhCurrencySelect(Currencies) {
 
     $ctrl.valid = true;
 
+    $ctrl.label = $ctrl.label || 'FORM.LABELS.CURRENCY';
+
     // default to noop() if an onChange() method was not passed in
     $ctrl.onChange = $ctrl.onChange || angular.noop;
   };
@@ -88,13 +91,13 @@ function bhCurrencySelect(Currencies) {
       digestDisableIds(changes.disableIds.currentValue);
     }
 
+    // FIXME - why is this needed?
     if (changes.onChange) {
       $ctrl.onChange = changes.onChange.currentValue;
     }
   };
 
   function digestDisableIds(disabledIds) {
-
     // make sure there is something to digest
     if (!isArray(disabledIds)) { return; }
     if (!isArray($ctrl.currencies)) { return; }
@@ -104,7 +107,7 @@ function bhCurrencySelect(Currencies) {
     $ctrl.currencies.forEach(function (currency) {
       var disabled = disabledIds.indexOf(currency.id) > -1;
       currency.disabled = disabled;
-      currency.title = disabled ?  'FORM.INFO.DISABLED_CURRENCY' : '';
+      currency.title = disabled ? 'FORM.INFO.DISABLED_CURRENCY' : '';
     });
 
     // make sure we haven't defaulted to a currency that is not allowed by this casbhox

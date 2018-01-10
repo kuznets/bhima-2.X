@@ -37,7 +37,7 @@
           <header class="sidebar-header">
             <div class="header-content">
               <div class="header-image">
-                <a class="app-logo">
+                <a class="app-logo" id="logo">
                   <span class="logo-container">
                     <img src="assets/icon.png" width="40" height="40">
                   </span>
@@ -45,7 +45,7 @@
               </div>
 
               <div class="header-title">
-                <h4><a class="title-content" ui-sref="index.details">{{ AppCtrl.project.name }}</a></h4>
+                <h4><a class="title-content" ui-sref="index">{{ AppCtrl.project.name }}</a></h4>
               </div>
             </div>
           </header>
@@ -109,6 +109,7 @@
 
 <!-- this is templated in with variables from gulp-template -->
 <script>
+  
   angular.module('bhima')
     .config(['$compileProvider', function ($compileProvider) {
       $compileProvider.debugInfoEnabled(<%= isDevelopment %>);

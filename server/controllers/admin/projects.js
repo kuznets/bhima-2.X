@@ -4,9 +4,10 @@
  * This controller is responsible for implementing full CRUD on the
  * project table via the /projects endpoint.
  *
- * NOTE: this endpoint does not filter for enterprise ID.  We should probably
- * move to doing this in the future.
- */
+ * NOTE:
+ *  this endpoint does not filter for enterprise ID.  We should probably
+ *   move to doing this in the future.
+ * */
 
 const db = require('../../lib/db');
 const NotFound = require('../../lib/errors/NotFound');
@@ -52,7 +53,7 @@ exports.list = function list(req, res, next) {
   }
 
   db.exec(sql)
-    .then(function (rows) {
+    .then((rows) => {
       res.status(200).json(rows);
     })
     .catch(next)
@@ -87,17 +88,16 @@ exports.detail = function detail(req, res, next) {
  * Creates a new project.
  */
 exports.create = function create(req, res, next) {
-  let sql, data = req.body;
-
-  sql =
-    'INSERT INTO project (name, abbr, enterprise_id, zs_id, locked) VALUES (?, ?, ?, ?, ?);';
+  const data = req.body;
+  const sql =
+    `INSERT INTO project (name, abbr, enterprise_id, zs_id, locked) VALUES (?, ?, ?, ?, ?);`;
 
   db.exec(sql, [data.name, data.abbr, data.enterprise_id, data.zs_id, data.locked])
-  .then(function (row) {
-    res.status(201).send({ id : row.insertId });
-  })
-  .catch(next)
-  .done();
+    .then((row) => {
+      res.status(201).send({ id : row.insertId });
+    })
+    .catch(next)
+    .done();
 };
 
 /**
@@ -112,21 +112,20 @@ exports.update = function update(req, res, next) {
     'UPDATE project SET ? WHERE id = ?;';
 
   db.exec(sql, [req.body, req.params.id])
-  .then(function () {
-
-    sql =
+    .then(() => {
+      sql =
       `SELECT project.id, project.enterprise_id, project.abbr,
         project.zs_id, project.name, project.locked
       FROM project
       WHERE project.id = ?;`;
 
-    return db.exec(sql, [req.params.id]);
-  })
-  .then(function (rows) {
-    res.status(200).json(rows[0]);
-  })
-  .catch(next)
-  .done();
+      return db.exec(sql, [req.params.id]);
+    })
+    .then((rows) => {
+      res.status(200).json(rows[0]);
+    })
+    .catch(next)
+    .done();
 };
 
 
@@ -136,19 +135,17 @@ exports.update = function update(req, res, next) {
  * Deletes a project.
  */
 exports.delete = function del(req, res, next) {
-  let sql =
-    'DELETE FROM project WHERE id = ?;';
+  const sql = `DELETE FROM project WHERE id = ?;`;
 
   db.exec(sql, [req.params.id])
-  .then(function (row) {
-
+    .then((row) => {
     // if nothing happened, let the client know via a 404 error
-    if (row.affectedRows === 0) {
-      throw new NotFound(`No project found by id ${req.params.id}.`);
-    }
+      if (row.affectedRows === 0) {
+        throw new NotFound(`No project found by id ${req.params.id}.`);
+      }
 
-    res.sendStatus(204);
-  })
-  .catch(next)
-  .done();
+      res.sendStatus(204);
+    })
+    .catch(next)
+    .done();
 };

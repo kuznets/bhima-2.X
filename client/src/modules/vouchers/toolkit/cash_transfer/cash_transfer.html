@@ -1,0 +1,69 @@
+<div class="modal-header">
+  <ol class="headercrumb">
+    <li class="static" translate>VOUCHERS.GLOBAL.CASH_TRANSFER</li>
+    <li class="title" translate>VOUCHERS.GLOBAL.IMPORT_TRANSACTION</li>
+  </ol>
+</div>
+
+<form name="ToolForm" bh-submit="ToolCtrl.import(ToolForm)" novalidate>
+  <div class="modal-body">
+
+    <!-- select the cashbox (to debit)  -->
+    <div
+      class="form-group"
+      ng-class="{ 'has-error' : ToolForm.$submitted && ToolForm.cashbox.$invalid }">
+      <label class="control-label" translate>
+        FORM.LABELS.CASHBOX
+      </label>
+      (<label class="control-label" translate>FORM.LABELS.DEBIT</label>)
+
+      <ui-select
+        name="cashbox"
+        ng-model="ToolCtrl.cashbox"
+        on-select="ToolCtrl.select()"
+        required>
+        <ui-select-match placeholder="{{ 'FORM.PLACEHOLDERS.CASHBOX' | translate }}">
+          <span>{{$select.selected.label}} ({{$select.selected.symbol}})</span>
+        </ui-select-match>
+        <ui-select-choices ui-select-focus-patch repeat="cashbox in ToolCtrl.cashboxes | filter:$select.search">
+          <span ng-bind-html="cashbox.label | highlight:$select.search"></span>
+          (<span ng-bind-html="cashbox.symbol | highlight:$select.search"></span>)
+        </ui-select-choices>
+      </ui-select>
+
+      <div class="help-block" ng-messages="ToolForm.cashbox.$error" ng-show="ToolForm.$submitted">
+        <div ng-messages-include="modules/templates/messages.tmpl.html"></div>
+      </div>
+    </div>
+
+    <!-- select the transfer account (to credit) -->
+
+    <bh-account-select
+      label="VOUCHERS.GLOBAL.TRANSFER_ACCOUNT"
+      on-select-callback="ToolCtrl.onSelectAccountCallback(account)"
+      exclude-title-accounts="true">
+      (<label class="control-label" translate>FORM.LABELS.CREDIT</label>)
+    </bh-account-select>
+
+    <bh-currency-input
+      currency-id="ToolCtrl.cashbox.currency_id"
+      model="ToolCtrl.amount"
+      validation-trigger="ToolForm.$submitted">
+    </bh-currency-input>
+  </div>
+
+  <div class="modal-footer">
+    <button
+      type="button"
+      class="btn btn-default"
+      ng-click="ToolCtrl.close()"
+      data-method="close"
+      translate>
+      FORM.BUTTONS.CANCEL
+    </button>
+
+    <bh-loading-button loading-state="ToolForm.$loading" disabled="ToolForm.$invalid">
+      <span translate>FORM.BUTTONS.SUBMIT</span>
+    </bh-loading-button>
+  </div>
+</form>

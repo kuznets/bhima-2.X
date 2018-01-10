@@ -4,12 +4,11 @@
  *
  * @description
  * This controller exposes an API to the client for reading and writing supplier
- */
+ * */
 
 
 const db = require('../../lib/db');
-const uuid = require('node-uuid');
-const NotFound = require('../../lib/errors/NotFound');
+const uuid = require('uuid/v4');
 const Topic = require('../../lib/topic');
 
 function lookupSupplier(uid) {
@@ -48,11 +47,11 @@ function list(req, res, next) {
   }
 
   db.exec(sql, params)
-  .then(function (rows) {
-    res.status(200).json(rows);
-  })
-  .catch(next)
-  .done();
+    .then((rows) => {
+      res.status(200).json(rows);
+    })
+    .catch(next)
+    .done();
 }
 
 /**
@@ -65,11 +64,11 @@ function list(req, res, next) {
  */
 function detail(req, res, next) {
   lookupSupplier(req.params.uuid)
-  .then(function (record) {
-    res.status(200).json(record);
-  })
-  .catch(next)
-  .done();
+    .then((record) => {
+      res.status(200).json(record);
+    })
+    .catch(next)
+    .done();
 }
 
 /**
@@ -85,10 +84,10 @@ function create(req, res, next) {
   const data = req.body;
 
   // provide uuid if the client has not specified
-  const recordUuid = data.uuid || uuid.v4();
+  const recordUuid = data.uuid || uuid();
   const transaction = db.transaction();
 
-  const creditorUuid = db.bid(uuid.v4());
+  const creditorUuid = db.bid(uuid());
   const creditorGroupUuid = db.bid(data.creditor_group_uuid);
 
   delete data.creditor_group_uuid;
@@ -102,19 +101,17 @@ function create(req, res, next) {
     'INSERT INTO supplier SET ?;';
 
   transaction
-    .addQuery(writeCreditorQuery, [creditorUuid, creditorGroupUuid, data.display_name ])
+    .addQuery(writeCreditorQuery, [creditorUuid, creditorGroupUuid, data.display_name])
     .addQuery(writeSupplierQuery, [data]);
 
   transaction.execute()
-    .then(function () {
-
+    .then(() => {
       Topic.publish(Topic.channels.INVENTORY, {
-        event: Topic.events.CREATE,
-        entity: Topic.entities.SUPPLIER,
-        user_id: req.session.user.id,
-        uuid: recordUuid
+        event : Topic.events.CREATE,
+        entity : Topic.entities.SUPPLIER,
+        user_id : req.session.user.id,
+        uuid : recordUuid,
       });
-
       res.status(201).json({ uuid : recordUuid });
     })
     .catch(next)
@@ -159,14 +156,12 @@ function update(req, res, next) {
 
   transaction.execute()
     .then(() => {
-
       Topic.publish(Topic.channels.INVENTORY, {
-        event: Topic.events.UPDATE,
-        entity: Topic.entities.SUPPLIER,
-        user_id: req.session.user.id,
-        uuid: req.params.uuid
+        event : Topic.events.UPDATE,
+        entity : Topic.entities.SUPPLIER,
+        user_id : req.session.user.id,
+        uuid : req.params.uuid,
       });
-
       return lookupSupplier(req.params.uuid);
     })
     .then(record => {
@@ -185,7 +180,7 @@ function update(req, res, next) {
  * This method search for a supplier by their display_name.
  */
 function search(req, res, next) {
-  let limit = Number(req.query.limit);
+  const limit = Number(req.query.limit);
 
   let sql = `
     SELECT BUID(supplier.uuid) as uuid, BUID(supplier.creditor_uuid) as creditor_uuid, supplier.display_name,
@@ -196,15 +191,15 @@ function search(req, res, next) {
   `;
 
   if (!isNaN(limit)) {
-    sql += 'LIMIT ' + Math.floor(limit) + ';';
+    sql += `${sql}LIMIT ${Math.floor(limit)};`;
   }
 
   db.exec(sql, [req.query.display_name])
-  .then(function (rows) {
-    res.status(200).json(rows);
-  })
-  .catch(next)
-  .done();
+    .then((rows) => {
+      res.status(200).json(rows);
+    })
+    .catch(next)
+    .done();
 }
 
 
@@ -217,7 +212,7 @@ exports.detail = detail;
 // create a new supplier
 exports.create = create;
 
-// update supplier informations
+// update supplier information
 exports.update = update;
 
 // search suppliers data

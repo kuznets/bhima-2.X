@@ -11,6 +11,8 @@ FiscalManagementController.$inject = [
  */
 function FiscalManagementController($state, Fiscal, Notify, Modal, util, moment) {
   var vm = this;
+  var id;
+  var isUpdate;
 
   // state variables
   vm.isUpdateState = $state.current.name === 'fiscal.update';
@@ -18,11 +20,12 @@ function FiscalManagementController($state, Fiscal, Notify, Modal, util, moment)
   vm.isCreateState = $state.current.name === 'fiscal.create';
 
   // identifier
-  var id = $state.params.id;
-  var isUpdate = (id && vm.isUpdateState);
+  id = $state.params.id;
+  isUpdate = (id && vm.isUpdateState);
 
   // global variables
   vm.fiscal = {};
+  vm.state = $state;
   vm.submit = submit;
   vm.maxLength = util.maxTextLength;
   vm.numberOfMonths = numberOfMonths;
@@ -40,6 +43,7 @@ function FiscalManagementController($state, Fiscal, Notify, Modal, util, moment)
       Fiscal.read(id)
       .then(function (fiscalYear) {
         vm.fiscal = fiscalYear;
+        $state.params.label = vm.fiscal.label;
         vm.fiscal.start_date = new Date(vm.fiscal.start_date);
         vm.fiscal.end_date = new Date(vm.fiscal.end_date);
       })
@@ -47,9 +51,9 @@ function FiscalManagementController($state, Fiscal, Notify, Modal, util, moment)
     }
 
     // previous fiscal year
-    Fiscal.read(null, { detailed: 1})
+    Fiscal.read(null, { detailed: 1 })
     .then(function (previous) {
-      if (!previous.length) { return ; }
+      if (!previous.length) { return; }
 
       vm.previous_fiscal_year = previous.map(function (fy) {
         fy.hrLabel = fy.label

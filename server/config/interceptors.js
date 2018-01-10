@@ -1,4 +1,4 @@
-
+/* eslint no-unused-vars:off */
 /**
  * @overview interceptors
  * This modules defines a unified error handler for the server.
@@ -8,14 +8,13 @@
  * The only unexpected errors are database errors, uniformly treated as
  * BadRequests (HTTP stats code 400).
  *
- * @requires winston
+ * @requires debug
  * @requires BadRequest
  */
 
-const winston = require('winston');
 const BadRequest = require('../lib/errors/BadRequest');
-
-const LOG_ALL_MYSQL_ERRORS = Number(process.env.LOG_ALL_MYSQL_ERRORS);
+const debugDB = require('debug')('db:errors');
+const debug = require('debug')('errors');
 
 // map MySQL error codes to HTTP status codes
 const map = {
@@ -46,6 +45,7 @@ const SQL_STATES = {
   45004 : 'ERRORS.NO_PERIOD',
   45005 : 'ERRORS.NO_EXCHANGE_RATE',
   45501 : 'ERRORS.OVERPAID_INVOICE',
+  45006 : 'ERRORS.MISSING_INVENTORY_ACCOUNTS',
 };
 
 /**
@@ -53,14 +53,20 @@ const SQL_STATES = {
  *
  * This error handler interprets all errors and sends them to the client.
  */
-exports.handler = function handler(error, req, res, next) {
+exports.handler = function handler(err, req, res, next) {
+  let error = err;
+
   // log the error to the error log (NOTE: in production, this should be 'error')
-  winston.log('debug', error);
+  debug('#interceptor() %j', error);
 
   // check if it is a database error and format the proper description if so.
   if (error.sqlState) {
     let key;
     let description;
+
+    debugDB(`#interceptor(): [SQL-QUERY] ${error.sql}`);
+    debugDB(`#interceptor(): [SQL-RESPONSE] ${error.code}`);
+    debugDB(`#interceptor(): [SQL-MESSAGE] ${error.sqlMessage}`);
 
     // todo(jniles) - unify this error handing
     if (error.code === 'ER_SIGNAL_EXCEPTION') {
@@ -70,11 +76,6 @@ exports.handler = function handler(error, req, res, next) {
       key = `ERRORS.${error.code || error.sqlState}`;
       description = map[error.code];
     }
-
-    if (LOG_ALL_MYSQL_ERRORS) {
-      winston.log('error', error);
-    }
-
     error = new BadRequest(description, key);
   }
 

@@ -1,4 +1,3 @@
-
 /**
  * @overview lib/renderers/csv
  *
@@ -10,14 +9,17 @@
  * @requires q
  * @requires lodash
  * @requires json2csv
+ * @requires moment
+ * @requires debug
  */
 
 const q = require('q');
 const _ = require('lodash');
 const converter = require('json-2-csv');
 const moment = require('moment');
+const debug = require('debug')('renderer:csv');
 
-// @TODO Discuss if this should be moved into its own library
+// @TODO discuss if this should be moved into its own library
 const DATE_FORMAT = 'DD/MM/YYYY H:mm:s';
 
 const headers = {
@@ -54,7 +56,10 @@ function renderCSV(data, template, options) {
 
   let csvData = data[options.csvKey || DEFAULT_DATA_KEY];
 
+  debug(`processing a CSV of ${csvData.length} rows.`);
+
   if (!options.suppressDefaultFormating) {
+    debug('applying default date formatting.');
     csvData = csvData.map(dateFormatter);
   }
 
@@ -64,18 +69,27 @@ function renderCSV(data, template, options) {
 
     // data set based filters
     csvData = emptyFilter(csvData);
+    debug('applying default row filtering.');
   }
 
   // render the data array csv as needed
   converter.json2csv(csvData, (error, csv) => {
     if (error) { return dfd.reject(error); }
-    dfd.resolve(csv);
+    return dfd.resolve(csv);
   }, csvOptions);
 
   // return the promise
   return dfd.promise;
 }
 
+// converts a value to a date string if it is a date
+const convertIfDate = (csvValue) => {
+  if (_.isDate(csvValue)) {
+    return moment(csvValue).format(DATE_FORMAT);
+  }
+
+  return csvValue;
+};
 
 /**
  * @method dateFormatter
@@ -86,7 +100,6 @@ function renderCSV(data, template, options) {
  */
 function dateFormatter(csvRow) {
   // utility function that accepts the value of a CSV date column and converts to a standard format
-  const convertIfDate = (csvValue, csvColumn) => _.isDate(csvValue) ? moment(csvValue).format(DATE_FORMAT) : csvValue;
   return _.mapValues(csvRow, convertIfDate);
 }
 

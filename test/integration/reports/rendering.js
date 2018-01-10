@@ -1,17 +1,15 @@
-'use strict';
-/* global expect, chai, agent */
+/* global expect, agent */
 
 const helpers = require('../helpers');
 const _ = require('lodash');
 
 // this makes render tests for reports the lazy way.  Just give it a target and it will write describe() tests for you.
-module.exports = function LazyTester(target, keys, params) {
+module.exports = function LazyTester(target, keys, options = {}) {
   return function LazyTest() {
-
-    params = _.clone(params || {});
+    const params = _.clone(options);
 
     // renders
-    const invalid = { renderer : 'unknown' };
+    const invalid = _.merge({ renderer : 'unknown' }, params);
     const json = _.merge({ renderer : 'json' }, params);
     const html = _.merge({ renderer : 'html' }, params);
     const pdf = _.merge({ renderer : 'pdf' }, params);
@@ -40,6 +38,7 @@ module.exports = function LazyTester(target, keys, params) {
     });
 
     it(`GET ${target} should return PDF data for 'pdf' rendering target`, function () {
+      this.timeout(5000);
       return agent.get(target)
         .query(pdf)
         .then(expectPDFReport)
@@ -47,7 +46,8 @@ module.exports = function LazyTester(target, keys, params) {
     });
 
     it(`GET ${target} should return the default PDF renderer if no rendering target`, function () {
-      let parameters = _.clone(params);
+      this.timeout(5000);
+      const parameters = _.clone(params);
       delete parameters.renderer;
       return agent.get(target)
         .query(parameters)

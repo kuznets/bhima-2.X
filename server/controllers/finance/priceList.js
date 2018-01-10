@@ -14,8 +14,7 @@
  */
 
 const db = require('../../lib/db');
-const uuid = require('node-uuid');
-const NotFound = require('../../lib/errors/NotFound');
+const uuid = require('uuid/v4');
 
 /**
  * Lists all price lists in the database
@@ -23,8 +22,7 @@ const NotFound = require('../../lib/errors/NotFound');
  * GET /prices
  */
 exports.list = function list(req, res, next) {
-
-  var sql;
+  let sql;
 
   if (req.query.detailed === '1') {
     sql =
@@ -41,11 +39,11 @@ exports.list = function list(req, res, next) {
   }
 
   db.exec(sql, [req.session.enterprise.id])
-  .then(function (rows) {
-    res.status(200).json(rows);
-  })
-  .catch(next)
-  .done();
+    .then((rows) => {
+      res.status(200).json(rows);
+    })
+    .catch(next)
+    .done();
 };
 
 /**
@@ -64,34 +62,27 @@ exports.list = function list(req, res, next) {
  * @returns {Promise}
  */
 function lookupPriceList(uid) {
-
-  var priceList;
-  var sql =
+  let priceList;
+  let sql =
     `SELECT BUID(uuid) AS uuid, label, description, created_at, updated_at
     FROM price_list WHERE uuid = ?;`;
 
-  return db.exec(sql, [ uid ])
-  .then(function (rows) {
+  return db.one(sql, [uid])
+    .then((row) => {
+      priceList = row;
 
-    // if no matches found, send a 404 error
-    if (rows.length === 0) {
-      throw new NotFound(`Could not find a price list with uuid ${uuid.unparse(uid)}`);
-    }
+      sql =
+        `SELECT BUID(uuid) as uuid, BUID(inventory_uuid) as inventory_uuid, label, value, is_percentage, created_at
+        FROM price_list_item WHERE price_list_uuid = ?;`;
 
-    priceList = rows[0];
+      return db.exec(sql, [uid]);
+    })
+    .then((rows) => {
+      priceList.items = rows;
 
-    sql =
-      `SELECT BUID(uuid) as uuid, BUID(inventory_uuid) as inventory_uuid, label, value, is_percentage, created_at
-      FROM price_list_item WHERE price_list_uuid = ?;`;
-
-    return db.exec(sql, [ uid ]);
-  })
-  .then(function (rows) {
-    priceList.items = rows;
-
-    // return the price list object to the next promise callback
-    return priceList;
-  });
+      // return the price list object to the next promise callback
+      return priceList;
+    });
 }
 
 
@@ -101,15 +92,14 @@ function lookupPriceList(uid) {
  * GET /prices/:uuid
  */
 exports.details = function details(req, res, next) {
-
   const uid = db.bid(req.params.uuid);
 
   lookupPriceList(uid)
-  .then(function (priceList) {
-    res.status(200).json(priceList);
-  })
-  .catch(next)
-  .done();
+    .then((priceList) => {
+      res.status(200).json(priceList);
+    })
+    .catch(next)
+    .done();
 };
 
 /**
@@ -155,21 +145,19 @@ exports.details = function details(req, res, next) {
  * @returns {Array} items
  */
 function formatPriceListItems(priceListUuid, items) {
-
   // format the price list items into a format that can be easily inserted into
   // the database
-  return items.map(function (item) {
-
+  return items.map((item) => {
     //  prevent missing inventory_uuids from crashing the server
     var inventoryId = item.inventory_uuid ? db.bid(item.inventory_uuid) : null;
 
     return [
-      db.bid(item.uuid || uuid.v4()),
+      db.bid(item.uuid || uuid()),
       inventoryId,
       priceListUuid,
       item.label,
       item.value,
-      item.is_percentage
+      item.is_percentage,
     ];
   });
 }
@@ -181,7 +169,6 @@ function formatPriceListItems(priceListUuid, items) {
  * POST /prices
  */
 exports.create = function create(req, res, next) {
-
   var items;
   var data = req.body.list;
   var trans = db.transaction();
@@ -193,7 +180,8 @@ exports.create = function create(req, res, next) {
     label, value, is_percentage) VALUES ?;`;
 
   // generate a UUID if not provided
-  data.uuid = db.bid(data.uuid || uuid.v4());
+  const priceListUuid = data.uuid || uuid();
+  data.uuid = db.bid(priceListUuid);
   // if the client didn't send price list items, do not create them.
   if (data.items) {
     items = formatPriceListItems(data.uuid, data.items);
@@ -204,22 +192,19 @@ exports.create = function create(req, res, next) {
 
   // enqueue the queries to the transaction
   trans.addQuery(priceListSql, [
-    data.uuid, data.label, data.description, req.session.enterprise.id
+    data.uuid, data.label, data.description, req.session.enterprise.id,
   ]);
 
   // only enqueue the price list items if they exist
-  if (items) { trans.addQuery(priceListItemSql, [ items ]); }
+  if (items) { trans.addQuery(priceListItemSql, [items]); }
 
   trans.execute()
-  .then(function () {
-
-    // respond to the client with a 201 CREATED
-    res.status(201).json({
-      uuid : uuid.unparse(data.uuid)
-    });
-  })
-  .catch(next)
-  .done();
+    .then(() => {
+      // respond to the client with a 201 CREATED
+      res.status(201).json({ uuid : priceListUuid });
+    })
+    .catch(next)
+    .done();
 };
 
 
@@ -229,7 +214,6 @@ exports.create = function create(req, res, next) {
  * PUT /prices/:uuid
  */
 exports.update = function update(req, res, next) {
-
   var items;
   var data = req.body.list;
   var priceListSql =
@@ -256,35 +240,33 @@ exports.update = function update(req, res, next) {
 
   // make sure the price list exists
   lookupPriceList(uid)
-  .then(function (priceList) {
+    .then(() => {
+      // if we get here, it means the price list exists and we can perform an
+      // update query on it. Since we are doing multiple operations at once,
+      // wrap the queries in a DB transaction.
+      if (!isEmptyObject(data)) {
+        trans.addQuery(priceListSql, [data, uid]);
+      }
 
-    // if we get here, it means the price list exists and we can perform an
-    // update query on it. Since we are doing multiple operations at once,
-    // wrap the queries in a DB transaction.
-    if (!isEmptyObject(data)) {
-      trans.addQuery(priceListSql, [ data, uid ]);
-    }
+      // only trigger price list item updates if the items have been sent back to
+      // the server
 
-    // only trigger price list item updates if the items have been sent back to
-    // the server
+      if (items) {
+        trans.addQuery(priceListDeleteItemSql, [uid]);
+        trans.addQuery(priceListCreateItemSql, [items]);
+      }
 
-    if (items) {
-      trans.addQuery(priceListDeleteItemSql, [ uid ]);
-      trans.addQuery(priceListCreateItemSql, [ items ]);
-    }
-
-    return trans.execute();
-  })
-  .then(function () {
-
-    // send the full resource object back to the client via lookup function
-    return lookupPriceList(uid);
-  })
-  .then(function (priceList) {
-    res.status(200).json(priceList);
-  })
-  .catch(next)
-  .done();
+      return trans.execute();
+    })
+    .then(() => {
+      // send the full resource object back to the client via lookup function
+      return lookupPriceList(uid);
+    })
+    .then((priceList) => {
+      res.status(200).json(priceList);
+    })
+    .catch(next)
+    .done();
 };
 
 
@@ -294,24 +276,22 @@ exports.update = function update(req, res, next) {
  * DELETE /prices/:uuid
  */
 exports.delete = function del(req, res, next) {
-
   const uid = db.bid(req.params.uuid);
 
-  var sql =
+  const sql =
     'DELETE FROM price_list WHERE uuid = ?;';
 
   // ensure that the price list exists
   lookupPriceList(uid)
-  .then(function () {
-    return db.exec(sql, [ uid ]);
-  })
-  .then(function () {
-
+    .then(() => {
+      return db.exec(sql, [uid]);
+    })
+    .then(() => {
     // respond with 204 'NO CONTENT'
-    res.status(204).json();
-  })
-  .catch(next)
-  .done();
+      res.status(204).json();
+    })
+    .catch(next)
+    .done();
 };
 
 function isEmptyObject(object) {

@@ -1,3 +1,4 @@
+/* eslint import/no-unresolved:off */
 /**
  * @overview
  * This controller uses the Topic library to broadcast events to the client
@@ -14,6 +15,8 @@
 const os = require('os');
 const db = require('../lib/db');
 const Topic = require('../lib/topic');
+
+// this path is correct _when compiled_
 const pkg = require('../../../package.json');
 
 // GET system/stream
@@ -33,7 +36,6 @@ exports.info = info;
  * time.  This is useful for system activity monitoring.
  */
 function stream(req, res) {
-
   // ensure the socket hangs open forever
   res.set('Content-Type', 'text/event-stream');
   res.set('Content-Control', 'no-cache');
@@ -46,7 +48,7 @@ function stream(req, res) {
   }
 
   // listener for server events and echo them to the client
-  let subscription = Topic.subscribe(Topic.channels.ALL, listener);
+  const subscription = Topic.subscribe(Topic.channels.ALL, listener);
 
   // remove listener on when the client closes the connection
   res.on('close', () => {
@@ -65,35 +67,33 @@ function stream(req, res) {
  * @todo - should the parsing happen on the client?
  */
 function events(req, res, next) {
-  let sql = `
+  const sql = `
     SELECT event.data FROM event LIMIT 1000;
   `;
 
   db.exec(sql)
-  .then(rows => {
-
+    .then(rows => {
       // events are stored as TEXT, that need to be parsed into JSON data.
-    let events = rows.map(row => row.data);
-    res.status(200).json(events);
-  })
-  .catch(next)
-  .done();
+      const eventString = rows.map(row => row.data);
+      res.status(200).json(eventString);
+    })
+    .catch(next)
+    .done();
 }
 
 // send operating system information
 function info(req, res) {
-
   // platform information string
   const platformString = `${os.platform()}-${os.arch()}-${os.release()}`;
 
   // data to be returned to the client
   const data = {
-    platform: platformString,
-    numCPUs: os.cpus().length,
-    machineUptime: os.uptime() * 1000,       // change to milliseconds
-    processUptime: process.uptime() * 1000,  // change to milliseconds
-    memoryUsage: (1 - (os.freemem() / os.totalmem()))*100,
-    version: pkg.version,
+    platform : platformString,
+    numCPUs : os.cpus().length,
+    machineUptime : os.uptime() * 1000, // change to milliseconds
+    processUptime : process.uptime() * 1000, // change to milliseconds
+    memoryUsage : (1 - (os.freemem() / os.totalmem())) * 100,
+    version : pkg.version,
   };
 
   // respond with the system statistics

@@ -30,7 +30,7 @@ function getExchangeRate(enterpriseId, currencyId, date) {
  */
 exports.list = function list(req, res, next) {
   const enterprise = req.session.enterprise;
-  const options  = req.query;
+  const options = req.query;
 
   getExchangeRateList(enterprise.id, options)
     .then(rows => {
@@ -47,21 +47,20 @@ exports.list = function list(req, res, next) {
  * @description
  * Returns the list of exchange rates tied to a particular enterprise.
  */
-function getExchangeRateList(enterpriseId, options) {
-
-  options = options || {};
+function getExchangeRateList(enterpriseId, opts) {
+  const options = opts || {};
 
   const limit = Number(options.limit);
   const limitQuery = Number.isNaN(limit) ? '' : `LIMIT ${limit}`;
 
   const sql = `
-    SELECT exchange_rate.id, exchange_rate.enterprise_id, exchange_rate.currency_id, exchange_rate.rate, exchange_rate.date,
-      enterprise.currency_id AS 'enterprise_currency_id'
+    SELECT exchange_rate.id, exchange_rate.enterprise_id, exchange_rate.currency_id, 
+    exchange_rate.rate, exchange_rate.date, enterprise.currency_id AS 'enterprise_currency_id'
     FROM exchange_rate
     JOIN enterprise ON enterprise.id = exchange_rate.enterprise_id
     WHERE exchange_rate.enterprise_id = ?
     ORDER BY date DESC
-    ${ limitQuery };
+    ${limitQuery};
   `;
 
   return db.exec(sql, [enterpriseId]);
@@ -69,24 +68,23 @@ function getExchangeRateList(enterpriseId, options) {
 
 // POST /exchange
 exports.create = function create(req, res, next) {
-  var sql,
-      data = req.body.rate;
+  const data = req.body.rate;
 
   // pre-process dates for mysql insertion
   if (data.date) {
     data.date = new Date(data.date);
   }
 
-  sql =
+  const sql =
     `INSERT INTO exchange_rate (enterprise_id, currency_id, rate, date)
     VALUES (?);`;
 
-  db.exec(sql, [[data.enterprise_id, data.currency_id, data.rate, data.date ]])
-  .then(function (row) {
-    res.status(201).json({ id: row.insertId });
-  })
-  .catch(next)
-  .done();
+  db.exec(sql, [[data.enterprise_id, data.currency_id, data.rate, data.date]])
+    .then((row) => {
+      res.status(201).json({ id : row.insertId });
+    })
+    .catch(next)
+    .done();
 };
 
 
@@ -103,27 +101,25 @@ exports.update = function update(req, res, next) {
   }
 
   db.exec(sql, [req.body, req.params.id])
-  .then(function () {
-
-    sql =
-      `SELECT exchange_rate.id, exchange_rate.enterprise_id, exchange_rate.currency_id, exchange_rate.rate, exchange_rate.date,
-      enterprise.currency_id AS enterprise_currency_id
+    .then(() => {
+      sql =
+      `SELECT
+        exchange_rate.id, exchange_rate.enterprise_id, exchange_rate.currency_id, 
+        exchange_rate.rate, exchange_rate.date, enterprise.currency_id AS enterprise_currency_id
       FROM exchange_rate
       JOIN enterprise ON enterprise.id = exchange_rate.enterprise_id
       WHERE exchange_rate.id = ?;`;
 
-    return db.exec(sql, [req.params.id]);
-  })
-  .then(function (rows) {
-
-    if (rows.length === 0) {
-	  throw new NotFound(`Could not find an exchange rate with id ${req.params.id}`);
-    }
-
-    res.status(200).json(rows[0]);
-  })
-  .catch(next)
-  .done();
+      return db.exec(sql, [req.params.id]);
+    })
+    .then((rows) => {
+      if (rows.length === 0) {
+        throw new NotFound(`Could not find an exchange rate with id ${req.params.id}`);
+      }
+      res.status(200).json(rows[0]);
+    })
+    .catch(next)
+    .done();
 };
 
 // DELETE /exchange/:id
@@ -132,15 +128,13 @@ exports.delete = function del(req, res, next) {
     'DELETE FROM exchange_rate WHERE id = ?;';
 
   db.exec(sql, [req.params.id])
-  .then(function (row) {
-
+    .then((row) => {
     // if nothing happened, let the client know via a 404 error
-    if (row.affectedRows === 0) {
-      throw new NotFound(`Could not find an exchange rate with id ${req.params.id}`);
-    }
-
-    res.status(204).json();
-  })
-  .catch(next)
-  .done();
+      if (row.affectedRows === 0) {
+        throw new NotFound(`Could not find an exchange rate with id ${req.params.id}`);
+      }
+      res.status(204).json();
+    })
+    .catch(next)
+    .done();
 };

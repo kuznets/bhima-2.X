@@ -4,8 +4,8 @@ angular.module('bhima.controllers')
 // dependencies injection
 CashPaymentRegistryController.$inject = [
   'CashService', 'bhConstants', 'NotifyService', 'SessionService', 'uiGridConstants',
-  'uiGridGroupingConstants', 'LanguageService', 'appcache', 'ReceiptModal', 'ModalService',
-  'GridSortingService', '$state', 'DepricatedFilterService'
+  'ModalService', 'GridSortingService', '$state', 'FilterService',
+  'GridColumnService', 'GridStateService', 'ModalService', 'util',
 ];
 
 /**
@@ -14,102 +14,135 @@ CashPaymentRegistryController.$inject = [
  * This controller is responsible to display all cash payment made and provides
  * print and search utilities for the registry.`j
  */
-function CashPaymentRegistryController(Cash, bhConstants, Notify, Session, uiGridConstants, uiGridGroupingConstants, Languages, AppCache, Receipt, Modal, Sorting, $state, Filters) {
+function CashPaymentRegistryController(
+  Cash, bhConstants, Notify, Session, uiGridConstants, Modal, Sorting, $state,
+  Filters, Columns, GridState, Modals, util,
+) {
   var vm = this;
 
-  var cache = AppCache('CashRegistry');
+  // background color for make the difference between the valid and canceled payment
+  var reversedBackgroundColor = { 'background-color' : '#ffb3b3' };
+  var regularBackgroundColor = { 'background-color' : 'none' };
+  var cacheKey = 'payment-grid';
 
-  // Background color for make the difference between the valid and cancel paiement
-  var reversedBackgroundColor = { 'background-color': '#ffb3b3' };
-  var regularBackgroundColor = { 'background-color': 'none' };
-  var FILTER_BAR_HEIGHT = bhConstants.grid.FILTER_BAR_HEIGHT;
-
+  var gridColumns;
+  var columnDefs;
+  var state;
   var filter = new Filters();
-  vm.filter = filter;
 
+  vm.filter = filter;
+  vm.format = util.formatDate;
   // global variables
-  // vm.filters = { lang: Languages.key };
-  vm.filtersFmt = [];
-  vm.gridOptions = {};
   vm.enterprise = Session.enterprise;
   vm.bhConstants = bhConstants;
-
-  // bind the cash payments receipt
-  vm.openReceiptModal = Receipt.cash;
 
   // expose to the view
   vm.search = search;
   vm.onRemoveFilter = onRemoveFilter;
-  vm.clearFilters = clearFilters;
   vm.cancelCash = cancelCash;
+  vm.openColumnConfigModal = openColumnConfigModal;
+  vm.clearGridState = clearGridState;
+  vm.deleteCashPayment = deleteCashPaymentWithConfirmation;
+  vm.download = Cash.download;
 
-  // grid default options
+  columnDefs = [{
+    field : 'reference',
+    displayName : 'TABLE.COLUMNS.REFERENCE',
+    headerCellFilter : 'translate',
+    aggregationType : uiGridConstants.aggregationTypes.count,
+    aggregationHideLabel : true,
+    sortingAlgorithm : Sorting.algorithms.sortByReference,
+    cellTemplate : '/modules/cash/payments/templates/reference.html',
+  }, {
+    field : 'date',
+    displayName : 'TABLE.COLUMNS.DATE',
+    headerCellFilter : 'translate',
+    cellTemplate : '/modules/cash/payments/templates/date.cell.html',
+    type : 'date',
+  }, {
+    name : 'patientName',
+    displayName : 'TABLE.COLUMNS.CLIENT',
+    headerCellFilter : 'translate',
+  }, {
+    field : 'description',
+    displayName : 'TABLE.COLUMNS.DESCRIPTION',
+    headerCellFilter : 'translate',
+  }, {
+    field : 'amount',
+    displayName : 'TABLE.COLUMNS.AMOUNT',
+    headerCellFilter : 'translate',
+    cellTemplate : 'modules/cash/payments/templates/amount.grid.html',
+    type : 'number',
+
+    // @TODO(jniles): This is temporary, as it doesn't take into account USD payments
+    aggregationType : uiGridConstants.aggregationTypes.sum,
+    aggregationHideLabel : true,
+    footerCellClass : 'text-right',
+  }, {
+    field : 'cashbox_label',
+    displayName : 'TABLE.COLUMNS.CASHBOX',
+    headerCellFilter : 'translate',
+  }, {
+    field : 'display_name',
+    displayName : 'TABLE.COLUMNS.USER',
+    headerCellFilter : 'translate',
+  }, {
+    field : 'action',
+    displayName : '',
+    enableFiltering : false,
+    enableSorting : false,
+    cellTemplate : 'modules/cash/payments/templates/action.cell.html',
+  }];
+
+   // grid default options
   vm.gridOptions = {
     appScopeProvider  : vm,
     showColumnFooter  : true,
     enableColumnMenus : false,
     flatEntityAccess  : true,
     fastWatch         : true,
-    enableFiltering   : vm.filterEnabled,
+    columnDefs        : columnDefs,
     rowTemplate       : '/modules/cash/payments/templates/grid.canceled.tmpl.html',
   };
 
-  vm.gridOptions.columnDefs = [{
-    field : 'reference', displayName : 'TABLE.COLUMNS.REFERENCE',
-    headerCellFilter: 'translate', aggregationType: uiGridConstants.aggregationTypes.count,
-    aggregationHideLabel : true, sortingAlgorithm : Sorting.algorithms.sortByReference,
-    cellTemplate : '/partials/cash/payments/templates/reference.html',
-  }, {
-    field : 'date', displayName : 'TABLE.COLUMNS.DATE', headerCellFilter: 'translate', cellFilter : 'date:"mediumDate"',
-  }, {
-    name : 'patientName', displayName : 'TABLE.COLUMNS.CLIENT', headerCellFilter: 'translate',
-  }, {
-    field : 'description', displayName : 'TABLE.COLUMNS.DESCRIPTION', headerCellFilter: 'translate'
-  }, {
-    field : 'amount', displayName : 'TABLE.COLUMNS.AMOUNT', headerCellFilter: 'translate',
-    cellTemplate : 'modules/cash/payments/templates/amount.grid.html', type: 'number',
+  gridColumns = new Columns(vm.gridOptions, cacheKey);
+  state = new GridState(vm.gridOptions, cacheKey);
 
-    // @TODO(jniles): This is temporary, as it doesn't take into account USD payments
-    aggregationType: uiGridConstants.aggregationTypes.sum, aggregationHideLabel : true,
-    footerCellFilter: 'currency:' + Session.enterprise.currency_id
-  }, {
-    field : 'cashbox_label', displayName : 'TABLE.COLUMNS.CASHBOX', headerCellFilter: 'translate'
-  }, {
-    field : 'display_name', displayName : 'TABLE.COLUMNS.USER', headerCellFilter: 'translate'
-  }, {
-    field : 'action', displayName : '', enableFiltering: false, enableSorting: false,
-    cellTemplate: 'modules/cash/payments/templates/action.cell.html'
-  }];
+  // saves the grid's current configuration
+  vm.saveGridState = state.saveGridState;
+  function clearGridState() {
+    state.clearGridState();
+    $state.reload();
+  }
 
   function handleError(error) {
     vm.hasError = true;
     Notify.handleError(error);
   }
 
-  // search
   function search() {
-    Modal.openSearchCashPayment(vm.filters.identifiers)
-      .then(function (filters) {
-        if (!filters) { return; }
+    var filtersSnapshot = Cash.filters.formatHTTP();
 
-        cacheFilters(filters);
-        load(vm.filters.identifiers);
-      });
-  }
+    Modal.openSearchCashPayment(filtersSnapshot)
+      .then(function (changes) {
+        Cash.filters.replaceFilters(changes);
 
-  // on remove one filter
-  function onRemoveFilter(key) {
-    delete vm.filters.identifiers[key];
-    delete vm.filters.display[key];
-    cacheFilters(vm.filters);
-    load(vm.filters.identifiers);
+        Cash.cacheFilters();
+        vm.latestViewFilters = Cash.filters.formatView();
+
+        return load(Cash.filters.formatHTTP(true));
+      })
+      .catch(angular.noop);
   }
 
   // remove a filter with from the filter object, save the filters and reload
-  function clearFilters() {
-    // @TODO standardise all client side filters
-    cacheFilters({ display : {}, identifiers : {} });
-    load(vm.filters.identifiers);
+  function onRemoveFilter(key) {
+    Cash.removeFilter(key);
+
+    Cash.cacheFilters();
+    vm.latestViewFilters = Cash.filters.formatView();
+
+    return load(Cash.filters.formatHTTP(true));
   }
 
   // load cash
@@ -117,12 +150,10 @@ function CashPaymentRegistryController(Cash, bhConstants, Notify, Session, uiGri
     vm.hasError = false;
     toggleLoadingIndicator();
 
-    var request = angular.isDefined(filters) ?
-      Cash.search(filters) :
-      Cash.read();
+    var request = Cash.read(null, filters);
 
-    request.then(function (rows) {
-
+    request
+      .then(function (rows) {
         rows.forEach(function (row) {
           var hasCreditNote = row.reversed;
           row._backgroundColor = hasCreditNote ? reversedBackgroundColor : regularBackgroundColor;
@@ -137,13 +168,13 @@ function CashPaymentRegistryController(Cash, bhConstants, Notify, Session, uiGri
       });
   }
 
- // Function for Cancel Cash cancel all Invoice
+  // Function for Cancel Cash cancel all Invoice
   function cancelCash(invoice) {
     Cash.openCancelCashModal(invoice)
       .then(function (success) {
         if (!success) { return; }
         Notify.success('FORM.INFO.TRANSACTION_REVER_SUCCESS');
-        load(vm.filters.identifiers);
+        load(Cash.Filters.formatHTTP(true));
       });
   }
 
@@ -151,40 +182,43 @@ function CashPaymentRegistryController(Cash, bhConstants, Notify, Session, uiGri
     vm.loading = !vm.loading;
   }
 
-  function cacheFilters(filters) {
-    applyDefaultFilters(filters);
-    vm.filters = cache.filters = filters;
-    vm.filtersFmt = Cash.formatFilterParameters(filters.display);
-    vm.filterBarHeight = (vm.filtersFmt.length > 0) ?  FILTER_BAR_HEIGHT : {};
-  }
-
   function startup() {
-    if ($state.params.filters) {
-      cacheFilters($state.params.filters);
+    if ($state.params.filters.length) {
+      Cash.filters.replaceFiltersFromState($state.params.filters);
+      Cash.cacheFilters();
     }
 
-    if (!cache.filters) {
-      cache.filters = { display : {}, identifiers : {} };
-    }
+    vm.latestViewFilters = Cash.filters.formatView();
 
-    vm.filters = cache.filters;
-    applyDefaultFilters(vm.filters);
-
-    vm.filtersFmt = Cash.formatFilterParameters(vm.filters.display);
-    load(vm.filters.identifiers);
-
-    vm.filterBarHeight = (vm.filtersFmt.length > 0) ?  FILTER_BAR_HEIGHT : {};
+    load(Cash.filters.formatHTTP(true));
+    vm.latestViewFilters = Cash.filters.formatView();
   }
 
-  function applyDefaultFilters(filters) {
-    if (!filters.identifiers) { filters.identifiers = {}; }
+  // This function opens a modal through column service to let the user toggle
+  // the visibility of the cash registry's columns.
+  function openColumnConfigModal() {
+    gridColumns.openConfigurationModal();
+  }
 
-    filters.identifiers = filter.applyDefaults(filters.identifiers);
+  function remove(entity) {
+    Cash.remove(entity.uuid)
+      .then(function () {
+        Notify.success('FORM.INFO.DELETE_RECORD_SUCCESS');
 
-    // @FIXME hack specifically for demonstrating default filter on cash page
-    if (filters.identifiers.defaultPeriod) {
-      filters.display.defaultPeriod = filter.lookupPeriod(filters.identifiers.defaultPeriod).label;
-    }
+        // load() has it's own error handling.  The absence of return below is
+        // explicit.
+        load(Cash.filters.formatHTTP(true));
+      })
+      .catch(Notify.handleError);
+  }
+
+  // this function deletes the cash payment and associated transactions from
+  // the database
+  function deleteCashPaymentWithConfirmation(entity) {
+    Modals.confirm('FORM.DIALOGS.CONFIRM_DELETE')
+      .then(function (isOk) {
+        if (isOk) { remove(entity); }
+      });
   }
 
   startup();

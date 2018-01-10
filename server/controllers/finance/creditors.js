@@ -22,7 +22,6 @@ exports.detail = detail;
  * @todo integration tests for this function
  */
 function list(req, res, next) {
-
   const sql = `
     SELECT BUID(c.uuid) as uuid, c.text, cg.name, BUID(c.group_uuid) as group_uuid,
       a.id AS account_id, a.number, map.text as hr_entity
@@ -33,11 +32,11 @@ function list(req, res, next) {
   `;
 
   db.exec(sql)
-  .then(function (rows) {
-    res.status(200).json(rows);
-  })
-  .catch(next)
-  .done();
+    .then((rows) => {
+      res.status(200).json(rows);
+    })
+    .catch(next)
+    .done();
 }
 
 /**
@@ -45,7 +44,6 @@ function list(req, res, next) {
  * @todo integration tests for this function
  */
 function detail(req, res, next) {
-
   const sql = `
     SELECT BUID(c.uuid) as uuid, c.text, cg.name, BUID(c.group_uuid) as group_uuid,
       a.id AS account_id, a.number
@@ -55,15 +53,13 @@ function detail(req, res, next) {
   `;
 
   db.exec(sql, [db.bid(req.params.uuid)])
-  .then(function (rows) {
-    if (!rows.length) {
-      throw new NotFound(
-        `Could not find creditor with uuid ${req.params.uuid}.`
-      );
-    }
+    .then((rows) => {
+      if (!rows.length) {
+        throw new NotFound(`Could not find creditor with uuid ${req.params.uuid}.`);
+      }
 
-    res.status(200).json(rows[0]);
-  })
-  .catch(next)
-  .done();
+      res.status(200).json(rows[0]);
+    })
+    .catch(next)
+    .done();
 }

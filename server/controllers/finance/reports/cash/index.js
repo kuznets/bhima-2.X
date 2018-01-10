@@ -1,4 +1,3 @@
-
 /**
  * @overview
  * Cash Reports
@@ -13,8 +12,9 @@
 
 const _ = require('lodash');
 const q = require('q');
-const moment = require('moment');
+const Moment = require('moment');
 
+const shared = require('../shared');
 const ReportManager = require('../../../../lib/ReportManager');
 
 const pdf = require('../../../../lib/renderers/pdf');
@@ -43,7 +43,7 @@ const REPORT_TEMPLATE = './server/controllers/finance/reports/cash/report.handle
 function receipt(req, res, next) {
   const options = req.query;
 
-  let report;
+  let receiptReport;
   let template = RECEIPT_TEMPLATE;
 
   if (Number(options.posReceipt)) {
@@ -53,9 +53,10 @@ function receipt(req, res, next) {
 
   // set up the report with report manager
   try {
-    report = new ReportManager(template, req.session, options);
+    receiptReport = new ReportManager(template, req.session, options);
   } catch (e) {
-    return next(e);
+    next(e);
+    return;
   }
 
   const data = {};
@@ -79,23 +80,30 @@ function receipt(req, res, next) {
       payment.renderedDescription = renderedDescription;
 
       // lookup balances on all invoices
-      const invoices = payment.items.map(invoices => invoices.invoice_uuid);
+      const invoicesItems = payment.items.map(invoices => invoices.invoice_uuid);
 
       return q.all([
         Users.lookup(payment.user_id),
         Patients.lookupByDebtorUuid(payment.debtor_uuid),
         Enterprises.lookupByProjectId(payment.project_id),
-        Debtors.invoiceBalances(payment.debtor_uuid, invoices),
+        Debtors.invoiceBalances(payment.debtor_uuid, invoicesItems),
         Debtors.balance(payment.debtor_uuid),
       ]);
     })
     .spread((user, patient, enterprise, invoices, totalInvoices) => {
-      _.assign(data, { user, patient, enterprise, invoices, totalInvoices });
+      _.assign(data, {
+        user,
+        patient,
+        enterprise,
+        invoices,
+        totalInvoices,
+      });
+
       return Exchange.getExchangeRate(enterprise.id, data.payment.currency_id, data.payment.date);
     })
     .then((exchange) => {
       data.rate = exchange.rate;
-      data.currentDateFormatted = (new moment()).format('L');
+      data.currentDateFormatted = (new Moment()).format('L');
       data.hasRate = (data.rate && !data.payment.is_caution);
 
       data.balances = data.invoices.reduce((aggregate, invoice) => {
@@ -114,7 +122,7 @@ function receipt(req, res, next) {
         invoiceItem.payment_complete = invoiceItem.balance === 0;
       });
 
-      return report.render(data);
+      return receiptReport.render(data);
     })
     .then((result) => {
       res.set(result.headers).send(result.report);
@@ -133,24 +141,23 @@ function receipt(req, res, next) {
  * GET /reports/finance/cash
  */
 function report(req, res, next) {
-  let options = {};
-  let display = {};
-  let hasFilter = false;
+  let reportInstance;
+  const query = _.clone(req.query);
+  const filters = shared.formatFilters(req.query);
 
-  let report;
-  let optionReport =  _.extend(req.query, { filename : 'TREE.CASH_PAYMENT_REGISTRY', orientation : 'landscape'});
+  _.extend(query, {
+    filename : 'TREE.CASH_PAYMENT_REGISTRY',
+    csvKey : 'rows',
+    footerRight : '[page] / [toPage]',
+    footerFontSize : '7',
+  });
 
   // set up the report with report manager
   try {
-    if (req.query.identifiers && req.query.display) {
-      options = JSON.parse(req.query.identifiers);
-      display = JSON.parse(req.query.display);
-      hasFilter = Object.keys(display).length > 0;
-    }
-
-    report = new ReportManager(REPORT_TEMPLATE, req.session, optionReport);
+    reportInstance = new ReportManager(REPORT_TEMPLATE, req.session, query);
   } catch (e) {
-    return next(e);
+    next(e);
+    return;
   }
 
   // aggregates basic statistics about the selection
@@ -175,19 +182,17 @@ function report(req, res, next) {
     GROUP BY currency_id;
   `;
 
-  const data = {};
+  const data = { filters };
   let uuids;
 
-  CashPayments.listPayment(options)
+  CashPayments.find(query)
     .then(rows => {
-
       data.rows = rows;
-      data.hasFilter = hasFilter;
-      data.csv = rows;
-      data.display = display;
 
       // map the uuids for aggregate sql consumption
       uuids = rows.map(row => db.bid(row.uuid));
+
+      if (!uuids.length) { return false; }
 
       return db.one(aggregateSql, [uuids]);
     })
@@ -198,11 +203,13 @@ function report(req, res, next) {
       data.hasMultipleProjects = aggregates.numProjects > 1;
       data.hasMultipleCashboxes = aggregates.numCashboxes > 1;
 
+      if (!uuids.length) { return false; }
+
       return db.exec(costSql, [uuids]);
     })
     .then(amounts => {
       data.amounts = amounts;
-      return report.render(data);
+      return reportInstance.render(data);
     })
     .then(result => {
       res.set(result.headers).send(result.report);

@@ -1,4 +1,3 @@
-
 /**
  * @overview CreditorGroups
  *
@@ -6,20 +5,18 @@
  * This controller exposes an API to the client for reading and creditor_groups
  */
 const db = require('../../lib/db');
-const NotFound = require('../../lib/errors/NotFound');
 const BadRequest = require('../../lib/errors/BadRequest');
-const uuid = require('node-uuid');
+const uuid = require('uuid/v4');
 
 // GET /creditor_groups
-function lookupCreditorGroup(uuid) {
-
+function lookupCreditorGroup(Uuid) {
   const sql = `
     SELECT enterprise_id, BUID(uuid) as uuid, name, account_id, locked
     FROM creditor_group
     WHERE creditor_group.uuid = ?;
   `;
 
-  return db.one(sql, [db.bid(uuid)], uuid, 'Creditor Group');
+  return db.one(sql, [db.bid(Uuid)], Uuid, 'Creditor Group');
 }
 
 
@@ -30,16 +27,17 @@ function list(req, res, next) {
 
   if (req.query.detailed === '1') {
     sql = `
-      SELECT enterprise_id, BUID(creditor_group.uuid) AS uuid, creditor_group.name,
+      SELECT creditor_group.enterprise_id, BUID(creditor_group.uuid) AS uuid, creditor_group.name,
         creditor_group.account_id, creditor_group.locked,
-        COUNT(creditor.uuid) AS total_creditors
+        COUNT(creditor.uuid) AS total_creditors, account.number
       FROM creditor_group
+      JOIN account ON account.id = creditor_group.account_id
       LEFT JOIN creditor ON creditor.group_uuid = creditor_group.uuid
       GROUP BY creditor_group.uuid`;
   }
 
   db.exec(sql)
-    .then(function (rows) {
+    .then((rows) => {
       res.status(200).json(rows);
     })
     .catch(next)
@@ -53,7 +51,7 @@ function list(req, res, next) {
 */
 function detail(req, res, next) {
   lookupCreditorGroup(req.params.uuid)
-    .then(function (record) {
+    .then((record) => {
       res.status(200).json(record);
     })
     .catch(next)
@@ -70,15 +68,16 @@ function create(req, res, next) {
   const data = req.body;
 
   // provide UUID if the client has not specified
-  data.uuid = db.bid(data.uuid || uuid.v4());
+  const creditorGroupUuid = data.uuid || uuid();
+  data.uuid = db.bid(creditorGroupUuid);
   data.enterprise_id = req.session.enterprise.id;
 
   const sql =
     'INSERT INTO creditor_group SET ? ';
 
   db.exec(sql, [data])
-    .then(function (row) {
-      res.status(201).json({ uuid : uuid.unparse(data.uuid) });
+    .then(() => {
+      res.status(201).json({ uuid : creditorGroupUuid });
     })
     .catch(next)
     .done();
@@ -91,16 +90,16 @@ function create(req, res, next) {
 * Update a creditor group based on its uuid
 */
 function update(req, res, next) {
-  let sql =
+  const sql =
     'UPDATE creditor_group SET ? WHERE uuid = ?;';
 
   const uid = db.bid(req.params.uuid);
 
   db.exec(sql, [req.body, uid])
-    .then(function () {
+    .then(() => {
       return lookupCreditorGroup(req.params.uuid);
     })
-    .then(function (record) {
+    .then((record) => {
       res.status(200).json(record);
     })
     .catch(next)
@@ -118,7 +117,10 @@ function remove(req, res, next) {
   db.exec(sql, [uid])
     .then(rows => {
       if (!rows.affectedRows) {
-        throw new BadRequest(`Cannot delete the creditor group with id ${req.params.uuid}`, 'CREDITOR_GROUP.FAILURE_DELETE');
+        throw new BadRequest(
+          `Cannot delete the creditor group with id ${req.params.uuid}`,
+          'CREDITOR_GROUP.FAILURE_DELETE'
+        );
       }
       res.sendStatus(203);
     })

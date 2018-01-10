@@ -1,7 +1,6 @@
 <form
   name="TransactionTypeForm"
   bh-submit="$ctrl.submit(TransactionTypeForm)"
-  bh-form-defaults
   novalidate>
 
   <div class="modal-header">
@@ -16,14 +15,6 @@
       <label class="control-label">{{ 'FORM.LABELS.TEXT' | translate }}</label>
       <input type="text" class="form-control" name="text" autocomplete="off" ng-model="$ctrl.transactionType.text" required>
       <div class="help-block" ng-messages="TransactionTypeForm.text.$error" ng-show="TransactionTypeForm.$submitted">
-        <div ng-messages-include="modules/templates/messages.tmpl.html"></div>
-      </div>
-    </div>
-
-    <div class="form-group" ng-class="{ 'has-error' : TransactionTypeForm.$submitted && TransactionTypeForm.description.$invalid }">
-      <label class="control-label">{{ "FORM.LABELS.DESCRIPTION" | translate }}</i></label>
-      <input type="text" class="form-control" name="description" autocomplete="off" ng-model="$ctrl.transactionType.description" required>
-      <div class="help-block" ng-messages="TransactionTypeForm.description.$error" ng-show="TransactionTypeForm.$submitted">
         <div ng-messages-include="modules/templates/messages.tmpl.html"></div>
       </div>
     </div>

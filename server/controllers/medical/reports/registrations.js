@@ -19,39 +19,9 @@ const ReportManager = require('../../../lib/ReportManager');
 const db = require('../../../lib/db');
 
 const Patients = require('../patients');
+const shared = require('../../finance/reports/shared');
 
 const TEMPLATE = './server/controllers/medical/reports/registrations.handlebars';
-
-// translation key mappings for dynamic filters
-// Basically, to show a pretty filter bar, this will translate URL query params
-// into human-readable text to be placed in the report, showing the properties
-// filtered on.
-function formatFilters(qs) {
-  const columns = [
-    { field: 'name', displayName: 'FORM.LABELS.NAME' },
-    { field: 'sex', displayName: 'FORM.LABELS.GENDER' },
-    { field: 'hospital_no', displayName: 'FORM.LABELS.HOSPITAL_NO' },
-    { field: 'reference', displayName: 'FORM.LABELS.REFERENCE' },
-    { field: 'dateBirthFrom', displayName: 'FORM.LABELS.DOB', comparitor: '>', isDate: true },
-    { field: 'dateBirthTo', displayName: 'FORM.LABELS.DOB', comparitor: '<', isDate: true },
-    { field: 'dateRegistrationFrom', displayName: 'FORM.LABELS.DATE_REGISTRATION', comparitor: '>', isDate: true },
-    { field: 'dateRegistrationTo', displayName: 'FORM.LABELS.DATE_REGISTRATION', comparitor: '<', isDate: true },
-    { field: 'debtor_group_uuid', displayName: 'FORM.LABELS.DEBTOR_GROUP' },
-    { field: 'patient_group_uuid', displayName: 'PATIENT_GROUP.PATIENT_GROUP' },
-    { field: 'user_id', displayName: 'FORM.LABELS.USER' }
-  ];
-
-  return columns.filter(column => {
-    let value = qs[column.field];
-
-    if (!_.isUndefined(value)) {
-      column.value = value;
-      return true;
-    } else {
-      return false;
-    }
-  });
-}
 
 /**
  * @method build
@@ -64,22 +34,28 @@ function formatFilters(qs) {
  * GET /reports/patient/registrations
  */
 function build(req, res, next) {
-  const options = _.extend(req.query, { csvKey : 'patients' });
-  let report;
+  const options = _.clone(req.query);
 
-  // for now ReportManager will translate any key provided for filename as well as add a uniform timestamp
-  options.filename = 'PATIENT_REG.PAGE_TITLE';
+  _.extend(options, { 
+    filename : 'PATIENT_REG.PAGE_TITLE',
+    csvKey : 'patients', 
+    orientation : 'landscape',
+    footerRight : '[page] / [toPage]',
+    footerFontSize : '7',
+  });
+
+  let report;
 
   // set up the report with report manager
   try {
-    options.orientation = 'landscape';
     report = new ReportManager(TEMPLATE, req.session, options);
     delete options.orientation;
   } catch (e) {
-    return next(e);
+    next(e);
+    return;
   }
 
-  const filters = formatFilters(options);
+  const filters = shared.formatFilters(options);
 
   // enforce detailed columns
   options.detailed = 1;
@@ -99,18 +75,21 @@ function build(req, res, next) {
 
   Patients.find(options)
     .then(patients => {
-
       // calculate ages with moment
-      patients.forEach(patient => patient.age = moment().diff(patient.dob, 'years'));
+      patients.forEach(patient => {
+        patient.age = moment().diff(patient.dob, 'years');
+      });
+
 
       data.patients = patients;
 
+
       // if no patients matched the previous query, set the promise value to false
       // and skip rendering aggregates in the handlbars view
-      if (!patients) { return false; }
+      if (patients.length === 0) { return false; }
 
       // gather the uuids for the aggregate queries
-      let uuids = patients.map(p => db.bid(p.uuid));
+      const uuids = patients.map(p => db.bid(p.uuid));
 
       return db.one(sql, [uuids]);
     })
